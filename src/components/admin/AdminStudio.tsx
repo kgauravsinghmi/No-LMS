@@ -21,7 +21,12 @@ import {
   CheckCircle2,
   Shield,
   Palette,
-  Layout
+  Layout,
+  ListOrdered,
+  CheckSquare,
+  Quote,
+  Table as TableIcon,
+  Minus
 } from 'lucide-react';
 import { Course, Module, Topic, QuizQuestion, GradientTheme, AdminUser } from '../../types';
 import { GRADIENT_THEMES } from '../../utils/theme';
@@ -871,54 +876,117 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
                 {/* Markdown Toolbar */}
                 <div className="flex flex-wrap items-center gap-1.5 p-3 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 text-xs">
                   <button
+                    type="button"
                     onClick={() => insertMarkdownText('## ', '\n', 'Section Heading')}
-                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 font-bold"
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold"
+                    title="Heading 2"
                   >
                     H2
                   </button>
                   <button
+                    type="button"
                     onClick={() => insertMarkdownText('### ', '\n', 'Sub Heading')}
-                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 font-bold"
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold"
+                    title="Heading 3"
                   >
                     H3
                   </button>
                   <button
+                    type="button"
                     onClick={() => insertMarkdownText('**', '**', 'bold text')}
-                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 font-bold"
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold"
+                    title="Bold"
                   >
                     B
                   </button>
                   <button
+                    type="button"
                     onClick={() => insertMarkdownText('*', '*', 'italic text')}
-                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 italic"
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 italic"
+                    title="Italic"
                   >
                     I
                   </button>
                   <button
+                    type="button"
                     onClick={() => insertMarkdownText('`', '`', 'code')}
-                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 font-mono"
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 font-mono"
+                    title="Inline Code"
                   >
                     &lt;/&gt;
                   </button>
                   <button
+                    type="button"
+                    onClick={() => insertMarkdownText('\n- ', '\n', 'Bullet item')}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1 font-medium"
+                    title="Bullet List (- Item)"
+                  >
+                    <List className="w-3.5 h-3.5" /> List
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownText('\n1. ', '\n', 'First item')}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1 font-medium"
+                    title="Numbered List (1. Item)"
+                  >
+                    <ListOrdered className="w-3.5 h-3.5" /> 1. List
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownText('\n- [ ] ', '\n', 'Task item')}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1 font-medium"
+                    title="Checklist (- [ ] Task)"
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" /> Task
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownText('\n> ', '\n', 'Quotation or key insight')}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1 font-medium"
+                    title="Blockquote (> Quote)"
+                  >
+                    <Quote className="w-3.5 h-3.5" /> Quote
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownText('\n| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| Data 1 | Data 2 | Data 3 |\n', '\n', '')}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1 font-medium"
+                    title="Insert Table"
+                  >
+                    <TableIcon className="w-3.5 h-3.5" /> Table
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownText('\n---\n', '', '')}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1 font-medium"
+                    title="Horizontal Divider"
+                  >
+                    <Minus className="w-3.5 h-3.5" /> Divider
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => insertMarkdownText('```typescript\n', '\n```', '// Your code here')}
-                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100"
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700"
+                    title="Code Block"
                   >
                     Code Block
                   </button>
                   <button
+                    type="button"
                     onClick={() => insertMarkdownText('> [!TIP]\n> ', '\n', 'Write high-value insight here')}
                     className="px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold"
                   >
                     + Tip Callout
                   </button>
                   <button
+                    type="button"
                     onClick={() => insertMarkdownText('> [!NOTE]\n> ', '\n', 'Write important note here')}
                     className="px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold"
                   >
                     + Note Callout
                   </button>
                   <button
+                    type="button"
                     onClick={() => insertMarkdownText('> [!WARNING]\n> ', '\n', 'Write critical pitfall to avoid')}
                     className="px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-semibold"
                   >

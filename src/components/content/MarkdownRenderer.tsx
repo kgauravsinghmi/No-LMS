@@ -9,7 +9,6 @@ import {
   ExternalLink,
   HelpCircle,
   Sparkles,
-  ChevronRight,
   CheckCircle2,
   XCircle,
   RotateCcw
@@ -31,7 +30,6 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   fontSize = 'base',
   onHeadingsExtracted,
   quiz,
-  topicId,
   onQuizSubmit,
   savedQuizScore
 }) => {
@@ -178,6 +176,48 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
     let blockquoteLines: string[] = [];
     let blockquoteIndex = 0;
 
+    let inList: 'ul' | 'ol' | null = null;
+    let listItems: { text: string; num?: number }[] = [];
+    let listStartIndex = 1;
+    let listIndex = 0;
+
+    const flushList = () => {
+      if (inList && listItems.length > 0) {
+        const key = `list-${listIndex++}`;
+        if (inList === 'ul') {
+          nodes.push(
+            <ul
+              key={key}
+              className={`my-4 ml-6 space-y-2 list-disc text-slate-700 dark:text-slate-300 marker:text-indigo-500 ${typography.list}`}
+            >
+              {listItems.map((item, idx) => (
+                <li key={`ul-item-${idx}`} className="pl-1">
+                  {renderInlineFormatting(item.text)}
+                </li>
+              ))}
+            </ul>
+          );
+        } else if (inList === 'ol') {
+          nodes.push(
+            <ol
+              key={key}
+              start={listStartIndex}
+              className={`my-4 ml-6 space-y-2 list-decimal text-slate-700 dark:text-slate-300 marker:text-indigo-600 dark:marker:text-indigo-400 font-medium ${typography.list}`}
+            >
+              {listItems.map((item, idx) => (
+                <li key={`ol-item-${idx}`} value={item.num} className="pl-1">
+                  <span className="font-normal">{renderInlineFormatting(item.text)}</span>
+                </li>
+              ))}
+            </ol>
+          );
+        }
+        inList = null;
+        listItems = [];
+        listStartIndex = 1;
+      }
+    };
+
     const flushBlockquote = () => {
       if (blockquoteLines.length > 0) {
         const fullText = blockquoteLines.join('\n');
@@ -306,6 +346,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           codeContent = [];
           codeLanguage = '';
         } else {
+          flushList();
           flushBlockquote();
           flushTable();
           inCodeBlock = true;
@@ -321,6 +362,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
       // Blockquotes & Callouts
       if (line.trim().startsWith('>')) {
+        flushList();
         flushTable();
         const trimmed = line.trim().slice(1).trim();
         if (!inBlockquote) {
@@ -360,6 +402,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
       // Markdown Tables
       if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+        flushList();
         const cells = line.trim().split('|').slice(1, -1);
         if (!inTable) {
           inTable = true;
@@ -379,6 +422,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
       // Headings
       if (line.startsWith('#')) {
+        flushList();
         const match = line.match(/^(#{1,4})\s+(.+)$/);
         if (match) {
           const level = match[1].length;
@@ -418,6 +462,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
       // Horizontal rule / Divider
       if (line.trim() === '---' || line.trim() === '***' || line.trim() === '___') {
+        flushList();
         nodes.push(
           <div key={`hr-${i}`} className="my-8 flex items-center justify-center gap-2">
             <span className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-800 to-transparent"></span>
@@ -429,8 +474,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
       }
 
       // Checklists (e.g. - [ ] or - [x])
-      const checkMatch = line.match(/^(\s*)-\s+\[([ xX])\]\s+(.+)$/);
+      const checkMatch = line.match(/^(\s*)[-*+]\s+\[([ xX])\]\s+(.+)$/);
       if (checkMatch) {
+        flushList();
         const isDefaultChecked = checkMatch[2].toLowerCase() === 'x';
         const itemText = checkMatch[3];
         const checkId = `check-${i}-${itemText.slice(0, 10)}`;
@@ -461,34 +507,46 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         continue;
       }
 
-      // Unordered Lists
+      // Unordered Lists (*, -, +)
       const listMatch = line.match(/^(\s*)[-*+]\s+(.+)$/);
       if (listMatch) {
-        nodes.push(
-          <li key={`ul-${i}`} className={`ml-5 my-1.5 list-disc text-slate-700 dark:text-slate-300 marker:text-indigo-500 ${typography.list}`}>
-            {renderInlineFormatting(listMatch[2])}
-          </li>
-        );
+        flushBlockquote();
+        flushTable();
+        if (inList === 'ol') {
+          flushList();
+        }
+        if (!inList) {
+          inList = 'ul';
+        }
+        listItems.push({ text: listMatch[2].trim() });
         continue;
       }
 
-      // Ordered Lists
-      const olMatch = line.match(/^(\s*)(\d+)\.\s+(.+)$/);
+      // Ordered / Numbered Lists (1., 2., 1), 2), etc.)
+      const olMatch = line.match(/^(\s*)(\d+)[.)]\s+(.+)$/);
       if (olMatch) {
-        nodes.push(
-          <li key={`ol-${i}`} className={`ml-5 my-1.5 list-decimal text-slate-700 dark:text-slate-300 marker:text-indigo-600 dark:marker:text-indigo-400 font-medium ${typography.list}`}>
-            <span className="font-normal">{renderInlineFormatting(olMatch[3])}</span>
-          </li>
-        );
+        flushBlockquote();
+        flushTable();
+        if (inList === 'ul') {
+          flushList();
+        }
+        const itemNum = parseInt(olMatch[2], 10) || 1;
+        if (!inList) {
+          inList = 'ol';
+          listStartIndex = itemNum;
+        }
+        listItems.push({ text: olMatch[3].trim(), num: itemNum });
         continue;
       }
 
       // Empty line
       if (!line.trim()) {
+        flushList();
         continue;
       }
 
       // Regular Paragraph
+      flushList();
       nodes.push(
         <p key={`p-${i}`} className={`my-4 text-slate-700 dark:text-slate-300 ${typography.paragraph}`}>
           {renderInlineFormatting(line)}
@@ -497,6 +555,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
     }
 
     // Flush any remaining blocks
+    flushList();
     flushBlockquote();
     flushTable();
 
