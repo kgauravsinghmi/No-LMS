@@ -16,7 +16,9 @@ import {
   Table as TableIcon,
   Minus,
   Network,
-  Image as ImageIcon
+  Image as ImageIcon,
+  GitBranch,
+  ChevronDown
 } from 'lucide-react';
 import { Course, QuizQuestion, GradientTheme, AdminUser } from '../../types';
 import { GRADIENT_THEMES } from '../../utils/theme';
@@ -34,6 +36,137 @@ interface AdminStudioProps {
   onNavigateToCourse: (courseId: string, topicId?: string) => void;
   onExitAdmin: () => void;
 }
+
+const MERMAID_TEMPLATES = [
+  {
+    name: 'Flowchart / Architecture',
+    desc: 'System flow with nodes, decisions, & microservices',
+    code: `\`\`\`mermaid
+flowchart TD
+    Client[Web & Mobile App] -->|HTTPS / TLS| Gateway[API Gateway & Auth]
+    Gateway -->|gRPC| AuthSvc[Auth Service]
+    Gateway -->|Internal REST| CoreAPI[Core Microservice]
+    CoreAPI -->|Read / Write| PrimaryDB[(Primary PostgreSQL)]
+    CoreAPI -->|Cache| RedisCache[(Redis Cluster)]
+    CoreAPI -->|Async Event| EventBus[Kafka Event Stream]
+\`\`\`\n`
+  },
+  {
+    name: 'Sequence Diagram',
+    desc: 'Client-Gateway-Service-DB request lifecycle',
+    code: `\`\`\`mermaid
+sequenceDiagram
+    autonumber
+    actor User as Client App
+    participant GW as API Gateway
+    participant Svc as Core Service
+    participant DB as Distributed DB
+
+    User->>GW: POST /api/v1/auth/login
+    GW->>Svc: Validate Payload & JWT
+    Svc->>DB: Query User Credentials
+    DB-->>Svc: Return Record & Hash
+    Svc-->>GW: Issue Signed Session Token
+    GW-->>User: 200 OK (JWT Token)
+\`\`\`\n`
+  },
+  {
+    name: 'State Machine Diagram',
+    desc: 'Entity state transitions & event triggers',
+    code: `\`\`\`mermaid
+stateDiagram-v2
+    [*] --> Draft: Author writes lesson
+    Draft --> InReview: Submit for QA
+    InReview --> Approved: QA Passed
+    InReview --> Draft: Request Changes
+    Approved --> Published: Deploy to Platform
+    Published --> Archived: Sunset Course
+    Archived --> [*]
+\`\`\`\n`
+  },
+  {
+    name: 'Entity Relationship (ER)',
+    desc: 'Database schema & table relations',
+    code: `\`\`\`mermaid
+erDiagram
+    COURSE ||--o{ MODULE : contains
+    MODULE ||--o{ TOPIC : includes
+    TOPIC ||--o{ QUIZ_QUESTION : tests
+    USER ||--o{ PROGRESS : tracks
+    COURSE ||--o{ CERTIFICATE : issues
+
+    COURSE {
+        string id PK
+        string title
+        string category
+        string theme
+    }
+    TOPIC {
+        string id PK
+        string title
+        string content
+        int readingTime
+    }
+\`\`\`\n`
+  },
+  {
+    name: 'Git Branch Flow',
+    desc: 'Version control branch & merge lifecycle',
+    code: `\`\`\`mermaid
+gitGraph
+    commit id: "Initial Release v1.0"
+    branch feature/mermaid-charts
+    checkout feature/mermaid-charts
+    commit id: "Add Mermaid parser"
+    commit id: "Add interactive lightbox"
+    checkout main
+    merge feature/mermaid-charts id: "Merge v1.1" tag: "v1.1.0"
+    commit id: "Production Deploy"
+\`\`\`\n`
+  },
+  {
+    name: 'User Journey Map',
+    desc: 'User experience path & satisfaction ratings',
+    code: `\`\`\`mermaid
+journey
+    title Student Learning Journey on Luminary LMS
+    section Discover
+      Explore Course Catalog: 5: Student
+      Search Key Topics: 4: Student
+    section Learn
+      Read Interactive Content: 5: Student
+      Inspect Architecture Maps: 5: Student, Instructor
+    section Test & Certify
+      Complete Topic Quizzes: 4: Student
+      Claim Certificate: 5: Student
+\`\`\`\n`
+  },
+  {
+    name: 'Pie Distribution Chart',
+    desc: 'Curriculum & resource allocation breakdown',
+    code: `\`\`\`mermaid
+pie title Course Curriculum Distribution
+    "Core Theory & Concepts" : 35
+    "Hands-on Coding Labs" : 40
+    "Visual Architecture & Maps" : 15
+    "Quizzes & Verification" : 10
+\`\`\`\n`
+  },
+  {
+    name: 'Chronological Timeline',
+    desc: 'Milestones and evolution stages',
+    code: `\`\`\`mermaid
+timeline
+    title Technology Evolution Roadmap
+    section Phase 1 : 2024
+      Monolith Architecture : Initial MVP Release
+    section Phase 2 : 2025
+      Microservices : Container Orchestration
+    section Phase 3 : 2026
+      Edge & AI Agents : Distributed Autonomous Workflows
+\`\`\`\n`
+  }
+];
 
 export const AdminStudio: React.FC<AdminStudioProps> = ({
   adminUser,
@@ -69,6 +202,7 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
   const [isCreatingCourse, setIsCreatingCourse] = useState<boolean>(courses.length === 0);
   const [activeEditorTab, setActiveEditorTab] = useState<'write' | 'preview' | 'quiz' | 'settings'>('write');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [showMermaidMenu, setShowMermaidMenu] = useState<boolean>(false);
 
   // Course Form State (for creation or editing metadata)
   const [courseForm, setCourseForm] = useState({
@@ -982,6 +1116,53 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
                   >
                     + Warning Callout
                   </button>
+
+                  {/* Mermaid Diagram Templates Dropdown */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowMermaidMenu(prev => !prev)}
+                      className="px-2.5 py-1 rounded-lg border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 font-semibold flex items-center gap-1.5 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 transition-colors shadow-2xs"
+                      title="Insert Mermaid Maps, Charts & Diagrams"
+                    >
+                      <GitBranch className="w-3.5 h-3.5" />
+                      <span>+ Mermaid Chart</span>
+                      <ChevronDown className={`w-3 h-3 transition-transform ${showMermaidMenu ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {showMermaidMenu && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-20"
+                          onClick={() => setShowMermaidMenu(false)}
+                        />
+                        <div className="absolute left-0 top-full mt-1.5 w-72 z-30 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl p-2 space-y-1 animate-fade-in max-h-96 overflow-y-auto">
+                          <div className="px-2 py-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                            Choose Diagram Template
+                          </div>
+                          {MERMAID_TEMPLATES.map((tmpl) => (
+                            <button
+                              key={tmpl.name}
+                              type="button"
+                              onClick={() => {
+                                insertMarkdownText(tmpl.code, '', '');
+                                setShowMermaidMenu(false);
+                              }}
+                              className="w-full text-left p-2 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-slate-800 dark:text-slate-200 transition-colors group/item"
+                            >
+                              <div className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover/item:text-indigo-600 dark:group-hover/item:text-indigo-400">
+                                {tmpl.name}
+                              </div>
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                {tmpl.desc}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => insertMarkdownText('```mindmap\n# Central System Architecture\n## Frontend Layer\n### React 18 SPA\n### Tailwind Utility Matrix\n## Backend & Gateway\n### Node.js Microservices\n### REST & gRPC Transport\n## Data Tier\n### Primary Consensus DB\n### Read Replicas & Cache\n```\n', '', '')}

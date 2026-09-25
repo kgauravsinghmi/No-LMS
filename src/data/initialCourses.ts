@@ -54,6 +54,31 @@ Here is the truth: **Software should feel instant, readable, and respectful of t
 2. **Declarative UI (React 19 & TypeScript):** Strongly typed state machines prevent runtime crashes before code ever touches production.
 3. **Airy, Minimalist Aesthetics:** Soft gradient meshes, crisp border lines, and generous whitespace leave a lasting impression without overwhelming the reader.
 
+\`\`\`mermaid
+flowchart TD
+    subgraph Browser["Client Workspace (Browser)"]
+        UI[React 19 View Matrix]
+        State[Local & URL State]
+        UI <--> State
+    end
+
+    subgraph Pipeline["Instant Build & Dev Pipeline"]
+        Vite[Vite ESM Server]
+        Rollup[Rollup Tree Shaking]
+        Vite --> Rollup
+    end
+
+    subgraph Backend["Production Transport"]
+        GW[API Gateway & Auth]
+        Svc[Domain Microservices]
+        DB[(PostgreSQL & Redis)]
+        GW --> Svc --> DB
+    end
+
+    Browser <-->|Sub-50ms HMR| Pipeline
+    Browser <-->|HTTPS / REST & RPC| Backend
+\`\`\`
+
 \`\`\`typescript
 // The ideal component: readable, self-contained, typed
 interface UserBadgeProps {
@@ -232,10 +257,27 @@ Backend design does not need to be an academic exercise in theoretical perfectio
 
 ### REST vs. Typed RPC in Practice
 
-\`\`\`
-Client (Browser) ───[ Type-Safe Schema ]───> Server (Node.js)
-        ▲                                          │
-        └────────────[ JSON Response ]─────────────┘
+\`\`\`mermaid
+sequenceDiagram
+    autonumber
+    actor Client as Browser Client
+    participant GW as API Gateway
+    participant Auth as Auth Validator
+    participant Svc as Core Service
+    participant DB as PostgreSQL DB
+
+    Client->>GW: POST /api/courses (Bearer Token, CoursePayload)
+    activate GW
+    GW->>Auth: Validate JWT & Permissions
+    Auth-->>GW: Token OK (Role: Admin)
+    GW->>Svc: Forward typed RPC call
+    activate Svc
+    Svc->>DB: INSERT INTO courses (...)
+    DB-->>Svc: Success (Record ID created)
+    Svc-->>GW: Return Course JSON + ETag
+    deactivate Svc
+    GW-->>Client: 201 Created (Cache Headers, Clean DTO)
+    deactivate GW
 \`\`\`
 
 When designing internal APIs for your application:
@@ -293,11 +335,16 @@ When an application scales from 1,000 users to 1,000,000 users, the database is 
 
 ### The Cache-Aside (Lazy Loading) Pattern
 
-\`\`\`
-1. App requests Data (Key)
-2. Check Cache (Redis)
-   ├── HIT  ──> Return Data Immediately (< 2ms)
-   └── MISS ──> Query Primary DB ──> Write to Cache with TTL ──> Return Data
+\`\`\`mermaid
+flowchart TD
+    Req([Client Request Data]) --> CheckCache{Key Exists in Redis?}
+
+    CheckCache -->|Cache HIT| ReturnFast[Return Cached Data < 2ms]
+    ReturnFast --> Done([Response Delivered])
+
+    CheckCache -->|Cache MISS| QueryDB[(Query Primary PostgreSQL)]
+    QueryDB --> WriteCache[Write to Redis with TTL + Jitter]
+    WriteCache --> Done
 \`\`\`
 
 \`\`\`typescript

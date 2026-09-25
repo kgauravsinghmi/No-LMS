@@ -16,6 +16,7 @@ import {
 import { QuizQuestion } from '../../types';
 import { MindmapViewer } from './MindmapViewer';
 import { ImageViewer } from './ImageViewer';
+import { MermaidViewer } from './MermaidViewer';
 
 interface MarkdownRendererProps {
   content: string;
@@ -309,7 +310,14 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           const codeText = codeContent.join('\n');
           const lowerLang = (codeLanguage || '').toLowerCase().trim();
 
-          if (lowerLang === 'mindmap' || lowerLang === 'conceptmap' || lowerLang === 'tree' || lowerLang === 'diagram') {
+          if (lowerLang === 'mermaid') {
+            nodes.push(
+              <MermaidViewer
+                key={`mermaid-${codeBlockIndex++}`}
+                chart={codeText}
+              />
+            );
+          } else if (lowerLang === 'mindmap' || lowerLang === 'conceptmap' || lowerLang === 'tree' || lowerLang === 'diagram') {
             nodes.push(
               <MindmapViewer
                 key={`mindmap-${codeBlockIndex++}`}
