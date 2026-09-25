@@ -167,6 +167,24 @@ Managing state is where 90% of front-end bugs originate. When state becomes desy
 | **Tier 3: Durable** | LocalStorage / IndexedDB | User preferences, bookmarks, progress | Dark mode, reading progress |
 | **Tier 4: Remote** | Server Database / API | Collaborative data, user credentials | Published course content, user auth |
 
+\`\`\`mindmap
+root((State Architecture))
+  Ephemeral State
+    useState for dropdowns
+    useRef for DOM measurements
+    Input form drafts
+  Shareable State
+    URL Search Params
+    Active Tab Identifiers
+    Deep link topic anchors
+  Persistent Storage
+    Browser LocalStorage
+    IndexedDB for offline cache
+  Remote Source of Truth
+    PostgreSQL backend
+    Redis Session Cache
+\`\`\`
+
 > [!WARNING]
 > Never store derived state in a separate state variable! If you have items and filter, calculate filteredItems on the fly.
 
