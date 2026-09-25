@@ -2,33 +2,23 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Plus,
   Trash2,
-  Edit2,
   Save,
-  BookOpen,
-  Layers,
   FileText,
   Sparkles,
   Check,
   Eye,
-  Code,
   List,
-  AlertCircle,
   HelpCircle,
-  Clock,
-  Tag,
-  ArrowRight,
-  ArrowLeft,
-  CheckCircle2,
   Shield,
-  Palette,
-  Layout,
   ListOrdered,
   CheckSquare,
   Quote,
   Table as TableIcon,
-  Minus
+  Minus,
+  Network,
+  Image as ImageIcon
 } from 'lucide-react';
-import { Course, Module, Topic, QuizQuestion, GradientTheme, AdminUser } from '../../types';
+import { Course, QuizQuestion, GradientTheme, AdminUser } from '../../types';
 import { GRADIENT_THEMES } from '../../utils/theme';
 import { AVAILABLE_ICONS, getCourseIcon } from '../../utils/icons';
 import { storageService } from '../../services/storage';
@@ -643,7 +633,7 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
         </div>
       ) : selectedCourse ? (
         /* Workspace with Dynamic Outline Sidebar and Rich Editor */
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6 flex gap-6">
+        <div className="w-full max-w-[1720px] 2xl:max-w-[1840px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 py-6 flex gap-6">
 
           {/* LEFT SIDEBAR: Dynamic Curriculum Structure Builder */}
           <aside className="w-80 shrink-0 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4.5 shadow-xs flex flex-col justify-between max-h-[calc(100vh-6.5rem)] sticky top-20 overflow-y-auto">
@@ -991,6 +981,22 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
                     className="px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-semibold"
                   >
                     + Warning Callout
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownText('```mindmap\n# Central System Architecture\n## Frontend Layer\n### React 18 SPA\n### Tailwind Utility Matrix\n## Backend & Gateway\n### Node.js Microservices\n### REST & gRPC Transport\n## Data Tier\n### Primary Consensus DB\n### Read Replicas & Cache\n```\n', '', '')}
+                    className="px-2.5 py-1 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-semibold flex items-center gap-1 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
+                    title="Insert Interactive Visual Mindmap"
+                  >
+                    <Network className="w-3.5 h-3.5" /> + Mindmap
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertMarkdownText('![High-Level Architecture Reference](https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=1200&auto=format&fit=crop&q=80 "Detailed Topology & Network Flow")\n', '', '')}
+                    className="px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold flex items-center gap-1 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                    title="Insert Zoomable Diagram / Image Reference"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5" /> + Image / Diagram
                   </button>
                 </div>
 

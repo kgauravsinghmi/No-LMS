@@ -14,6 +14,8 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { QuizQuestion } from '../../types';
+import { MindmapViewer } from './MindmapViewer';
+import { ImageViewer } from './ImageViewer';
 
 interface MarkdownRendererProps {
   content: string;
@@ -305,43 +307,54 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         if (inCodeBlock) {
           // close code block
           const codeText = codeContent.join('\n');
-          const codeId = `code-${codeBlockIndex++}`;
-          nodes.push(
-            <div key={codeId} className="my-6 rounded-2xl overflow-hidden border border-slate-800 bg-[#0d1117] text-slate-200 shadow-lg">
-              <div className="flex items-center justify-between px-4 py-2.5 bg-[#161b22] border-b border-slate-800/80">
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500/70 inline-block"></span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500/70 inline-block"></span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/70 inline-block"></span>
+          const lowerLang = (codeLanguage || '').toLowerCase().trim();
+
+          if (lowerLang === 'mindmap' || lowerLang === 'conceptmap' || lowerLang === 'tree' || lowerLang === 'diagram') {
+            nodes.push(
+              <MindmapViewer
+                key={`mindmap-${codeBlockIndex++}`}
+                content={codeText}
+              />
+            );
+          } else {
+            const codeId = `code-${codeBlockIndex++}`;
+            nodes.push(
+              <div key={codeId} className="my-6 rounded-2xl overflow-hidden border border-slate-800 bg-[#0d1117] text-slate-200 shadow-lg">
+                <div className="flex items-center justify-between px-4 py-2.5 bg-[#161b22] border-b border-slate-800/80">
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500/70 inline-block"></span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500/70 inline-block"></span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/70 inline-block"></span>
+                    </div>
+                    <span className="text-xs font-mono font-medium text-slate-400 ml-2 uppercase tracking-wide">
+                      {codeLanguage || 'text'}
+                    </span>
                   </div>
-                  <span className="text-xs font-mono font-medium text-slate-400 ml-2 uppercase tracking-wide">
-                    {codeLanguage || 'text'}
-                  </span>
+                  <button
+                    onClick={() => handleCopyCode(codeText, codeId)}
+                    className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white px-2.5 py-1 rounded-lg hover:bg-slate-800/60 transition-colors"
+                    title="Copy code to clipboard"
+                  >
+                    {copiedCodeId === codeId ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400 font-medium">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
                 </div>
-                <button
-                  onClick={() => handleCopyCode(codeText, codeId)}
-                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white px-2.5 py-1 rounded-lg hover:bg-slate-800/60 transition-colors"
-                  title="Copy code to clipboard"
-                >
-                  {copiedCodeId === codeId ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="text-emerald-400 font-medium">Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Copy</span>
-                    </>
-                  )}
-                </button>
+                <pre className={`p-4.5 overflow-x-auto font-mono leading-relaxed text-slate-300 ${typography.code}`}>
+                  <code>{codeText}</code>
+                </pre>
               </div>
-              <pre className={`p-4.5 overflow-x-auto font-mono leading-relaxed text-slate-300 ${typography.code}`}>
-                <code>{codeText}</code>
-              </pre>
-            </div>
-          );
+            );
+          }
           inCodeBlock = false;
           codeContent = [];
           codeLanguage = '';
@@ -458,6 +471,23 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           }
           continue;
         }
+      }
+
+      // Standalone Image Line Match: ![alt](url "optional caption") or ![alt](url)
+      const imgBlockMatch = line.trim().match(/^!\[(.*?)\]\((\S+?)(?:\s+["'](.*?)["'])?\)$/);
+      if (imgBlockMatch) {
+        flushList();
+        flushBlockquote();
+        flushTable();
+        nodes.push(
+          <ImageViewer
+            key={`img-${i}`}
+            src={imgBlockMatch[2]}
+            alt={imgBlockMatch[1]}
+            caption={imgBlockMatch[3] || imgBlockMatch[1]}
+          />
+        );
+        continue;
       }
 
       // Horizontal rule / Divider
@@ -635,7 +665,13 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                 return (
                   <div key={q.id} className="p-5 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/70 dark:border-slate-800 shadow-xs">
                     <p className={`${typography.quizQuestion} font-semibold text-slate-900 dark:text-white mb-3.5 flex items-start gap-2.5`}>
-                      <span className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
+                        submittedQuiz
+                          ? isCorrect
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300'
+                            : 'bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      }`}>
                         {qIdx + 1}
                       </span>
                       <span>{q.question}</span>

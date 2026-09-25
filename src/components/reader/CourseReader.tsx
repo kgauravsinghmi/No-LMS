@@ -10,29 +10,22 @@ import {
   BookmarkCheck,
   Maximize2,
   Minimize2,
-  Share2,
   Sparkles,
   PenSquare,
-  FileText,
   ArrowLeft,
   ArrowUp,
-  Layers,
   Clock,
   Check,
   AlignLeft,
-  HelpCircle,
   Search,
-  ExternalLink,
-  Shield,
   Edit3,
   Award,
-  Zap,
   Minus,
   Plus,
   Type
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Course, Module, Topic, UserProgress, AdminUser } from '../../types';
+import { Course, UserProgress, AdminUser } from '../../types';
 import { GRADIENT_THEMES } from '../../utils/theme';
 import { getCourseIcon } from '../../utils/icons';
 import { MarkdownRenderer } from '../content/MarkdownRenderer';
@@ -154,7 +147,6 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
     const handleScroll = () => {
       if (!articleTopRef.current) return;
       const articleEl = articleTopRef.current;
-      const rect = articleEl.getBoundingClientRect();
       const windowHeight = window.innerHeight;
       const totalHeight = articleEl.offsetHeight;
       const scrolled = window.scrollY - (articleEl.offsetTop - 120);
@@ -420,8 +412,8 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
 
       </div>
 
-      {/* Main Reader Layout */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Main Reader Layout - Expanded Desktop/Laptop Canvas */}
+      <div className="w-full max-w-[1720px] 2xl:max-w-[1840px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 py-6">
         <div className="flex gap-8 items-start relative">
 
           {/* LEFT SIDEBAR: Dynamic Course & Topic Navigation (Hides in Zen Mode) */}
@@ -503,7 +495,7 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
                       {/* Topics List (Dynamically increases when added!) */}
                       {isExpanded && (
                         <div className="space-y-1 pl-2 border-l-2 border-slate-100 dark:border-slate-800 ml-3.5 py-1">
-                          {filteredTopics.map((topic, tIdx) => {
+                          {filteredTopics.map((topic) => {
                             const isActive = topic.id === activeTopicId;
                             const isCompleted = progress.completedTopicIds.includes(topic.id);
 
@@ -543,7 +535,7 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
           )}
 
           {/* CENTER: Main Blog-Style Course Content */}
-          <main className={`flex-1 min-w-0 transition-all ${isZenMode ? 'max-w-3xl mx-auto' : ''}`}>
+          <main className={`flex-1 min-w-0 transition-all ${isZenMode ? 'max-w-4xl lg:max-w-5xl mx-auto' : ''}`}>
 
             {activeTopicInfo ? (
               <article ref={articleTopRef} className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-10 lg:p-12 shadow-xs">
