@@ -823,7 +823,13 @@ function parseBlockquoteContent(text: string, typography: any): React.ReactNode 
       continue;
     }
 
-    // Regular content
+    // Empty line (blank line) - creates paragraph break
+    if (!trimmed) {
+      flushParagraph();
+      continue;
+    }
+
+    // Regular content - but if we're in a list, flush first
     if (inList) {
       flushParagraph();
       nodes.push(
@@ -839,9 +845,7 @@ function parseBlockquoteContent(text: string, typography: any): React.ReactNode 
       listItems = [];
     }
 
-    if (trimmed) {
-      currentParagraph.push(line);
-    }
+    currentParagraph.push(line);
   }
 
   // Flush any remaining
