@@ -248,13 +248,18 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           label = '';
         }
 
+        // Parse bullet points within blockquote content
+        const blockquoteNodes = parseBlockquoteContent(fullText, typography);
+
         nodes.push(
           <div key={key} className={`my-6 rounded-2xl border p-4.5 transition-all ${borderClass}`}>
             <div className="flex gap-3.5 items-start">
               {icon}
               <div className="flex-1 space-y-1">
                 {label && <div className="text-xs font-bold uppercase tracking-wider opacity-90">{label}</div>}
-                <div className={`${typography.blockquote} whitespace-pre-wrap`}>{renderInlineFormatting(fullText)}</div>
+                <div className={`${typography.blockquote}`}>
+                  {blockquoteNodes}
+                </div>
               </div>
             </div>
           </div>
@@ -769,6 +774,94 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
     </div>
   );
 };
+
+// Parse blockquote content into proper React nodes with bullet list support
+function parseBlockquoteContent(text: string, typography: any): React.ReactNode {
+  const lines = text.split('\n');
+  const nodes: React.ReactNode[] = [];
+  let currentParagraph: string[] = [];
+
+  const flushParagraph = () => {
+    if (currentParagraph.length > 0) {
+      const paraText = currentParagraph.join('\n').trim();
+      if (paraText) {
+        nodes.push(
+          <p key={`bq-p-${nodes.length}`} className={`${typography.blockquote}`}>
+            {renderInlineFormatting(paraText)}
+          </p>
+        );
+      }
+      currentParagraph = [];
+    }
+  };
+
+  let inList = false;
+  let listItems: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Bullet list item
+    if (trimmed.match(/^[-*+]\s+(.+)$/)) {
+      flushParagraph();
+      if (!inList) {
+        inList = true;
+        listItems = [];
+      }
+      listItems.push(trimmed.replace(/^[-*+]\s+/, ''));
+      continue;
+    }
+
+    // Numbered list item
+    if (trimmed.match(/^\d+[.)]\s+(.+)$/)) {
+      flushParagraph();
+      if (!inList) {
+        inList = true;
+        listItems = [];
+      }
+      listItems.push(trimmed.replace(/^\d+[.)]\s+/, ''));
+      continue;
+    }
+
+    // Regular content
+    if (inList) {
+      flushParagraph();
+      nodes.push(
+        <ul key={`bq-ul-${nodes.length}`} className={`ml-4 my-2 space-y-1.5 list-disc marker:text-indigo-500 ${typography.list}`}>
+          {listItems.map((item, idx) => (
+            <li key={`bq-li-${idx}`} className="pl-1">
+              {renderInlineFormatting(item)}
+            </li>
+          ))}
+        </ul>
+      );
+      inList = false;
+      listItems = [];
+    }
+
+    if (trimmed) {
+      currentParagraph.push(line);
+    }
+  }
+
+  // Flush any remaining
+  if (inList && listItems.length > 0) {
+    flushParagraph();
+    nodes.push(
+      <ul key={`bq-ul-${nodes.length}`} className={`ml-4 my-2 space-y-1.5 list-disc marker:text-indigo-500 ${typography.list}`}>
+        {listItems.map((item, idx) => (
+          <li key={`bq-li-${idx}`} className="pl-1">
+            {renderInlineFormatting(item)}
+          </li>
+        ))}
+      </ul>
+    );
+  } else {
+    flushParagraph();
+  }
+
+  return nodes.length === 1 ? nodes[0] : <>{nodes}</>;
+}
 
 // Helper function to render bold, italic, inline code, and links
 function renderInlineFormatting(text: string): React.ReactNode {
