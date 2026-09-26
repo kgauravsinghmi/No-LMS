@@ -137,13 +137,24 @@ export const MermaidViewer: React.FC<MermaidViewerProps> = ({ chart, title, clas
         const { svg } = await mermaid.render(renderId, chart);
 
         if (isMounted) {
-          // Enhance rendered SVG with responsive styles
-          const responsiveSvg = svg
-            .replace(/<svg\s+/, '<svg class="max-w-full h-auto mx-auto" ')
-            .replace(/height="[^"]*"/, '')
-            .replace(/style="[^"]*max-width:[^;]*;?"/, 'style="max-width: 100%;"');
-
-          setSvgHtml(responsiveSvg);
+          // Safely manipulate ONLY the root <svg> element using DOMParser to avoid stripping child node attributes
+          try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(svg, 'image/svg+xml');
+            const svgEl = doc.querySelector('svg');
+            if (svgEl) {
+              svgEl.removeAttribute('height');
+              svgEl.style.maxWidth = '100%';
+              svgEl.style.height = 'auto';
+              svgEl.classList.add('max-w-full', 'h-auto', 'mx-auto', 'block');
+              const serialized = new XMLSerializer().serializeToString(doc);
+              setSvgHtml(serialized);
+            } else {
+              setSvgHtml(svg);
+            }
+          } catch {
+            setSvgHtml(svg);
+          }
           setError(null);
           setIsLoading(false);
         }

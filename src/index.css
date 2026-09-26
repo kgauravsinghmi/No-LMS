@@ -100,6 +100,22 @@
   animation: pulse-subtle 4s ease-in-out infinite;
 }
 
+/* Mermaid Diagram text & rendering rules */
+.group\/mermaid svg {
+  overflow: visible;
+}
+
+.group\/mermaid foreignObject {
+  overflow: visible;
+}
+
+.group\/mermaid .node text,
+.group\/mermaid .label text,
+.group\/mermaid span.nodeLabel {
+  font-family: inherit;
+  font-weight: 500;
+}
+
 /* Print view optimization */
 @media print {
   .no-print {
