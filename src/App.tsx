@@ -10,6 +10,9 @@ import { SearchModal } from './components/common/SearchModal';
 import { CertificateModal } from './components/common/CertificateModal';
 import { LearningHub } from './components/learning/LearningHub';
 import { CheatSheetHub } from './components/reference/CheatSheetHub';
+import { RoleGuard } from './components/auth/RoleGuard';
+import { AuthModal } from './components/auth/AuthModal';
+import { useAuthStore } from './stores/useAuthStore';
 
 export function App() {
   // Application Data State
@@ -184,17 +187,19 @@ export function App() {
           <CheatSheetHub />
         )}
 
-        {currentView === 'admin' && adminUser && (
-          <AdminStudio
-            adminUser={adminUser}
-            courses={courses}
-            initialCourseId={selectedCourseId}
-            initialModuleId={editModuleId}
-            initialTopicId={selectedTopicId}
-            onCoursesUpdated={refreshData}
-            onNavigateToCourse={handleSelectCourse}
-            onExitAdmin={() => setCurrentView('catalog')}
-          />
+        {currentView === 'admin' && (
+          <RoleGuard requiredPermission="canAccessAdminStudio">
+            <AdminStudio
+              adminUser={adminUser || { username: 'Administrator', role: 'admin', token: 'admin-studio-token' }}
+              courses={courses}
+              initialCourseId={selectedCourseId}
+              initialModuleId={editModuleId}
+              initialTopicId={selectedTopicId}
+              onCoursesUpdated={refreshData}
+              onNavigateToCourse={handleSelectCourse}
+              onExitAdmin={() => setCurrentView('catalog')}
+            />
+          </RoleGuard>
         )}
       </div>
 
@@ -214,6 +219,9 @@ export function App() {
         onClose={() => setIsAdminLoginOpen(false)}
         onLoginSuccess={handleAdminLoginSuccess}
       />
+
+      {/* Auth & RBAC Modal */}
+      <AuthModal />
 
       {/* Certificate Modal */}
       {certificateCourse && (

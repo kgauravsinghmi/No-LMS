@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import mermaid from 'mermaid';
+import { sanitizeSvg } from '../../utils/sanitize';
 import {
   Maximize2,
   ZoomIn,
@@ -86,7 +87,7 @@ export const MermaidViewer: React.FC<MermaidViewerProps> = ({ chart, title, clas
       try {
         mermaid.initialize({
           startOnLoad: false,
-          securityLevel: 'loose',
+          securityLevel: 'strict',
           fontFamily: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
           theme: isDark ? 'dark' : 'default',
           themeVariables: isDark
@@ -137,10 +138,13 @@ export const MermaidViewer: React.FC<MermaidViewerProps> = ({ chart, title, clas
         const { svg } = await mermaid.render(renderId, chart);
 
         if (isMounted) {
-          // Safely manipulate ONLY the root <svg> element using DOMParser to avoid stripping child node attributes
+          // Strict DOMPurify sanitization before DOM injection
+          const cleanSvg = sanitizeSvg(svg);
+
+          // Safely manipulate root <svg> sizing attributes
           try {
             const parser = new DOMParser();
-            const doc = parser.parseFromString(svg, 'image/svg+xml');
+            const doc = parser.parseFromString(cleanSvg, 'image/svg+xml');
             const svgEl = doc.querySelector('svg');
             if (svgEl) {
               svgEl.removeAttribute('height');
@@ -150,10 +154,10 @@ export const MermaidViewer: React.FC<MermaidViewerProps> = ({ chart, title, clas
               const serialized = new XMLSerializer().serializeToString(doc);
               setSvgHtml(serialized);
             } else {
-              setSvgHtml(svg);
+              setSvgHtml(cleanSvg);
             }
           } catch {
-            setSvgHtml(svg);
+            setSvgHtml(cleanSvg);
           }
           setError(null);
           setIsLoading(false);

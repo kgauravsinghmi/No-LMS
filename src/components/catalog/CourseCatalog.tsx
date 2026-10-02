@@ -17,6 +17,7 @@ import {
 import { Course, UserProgress, AdminUser } from '../../types';
 import { GRADIENT_THEMES } from '../../utils/theme';
 import { getCourseIcon } from '../../utils/icons';
+import { useAuthStore } from '../../stores/useAuthStore';
 
 interface CourseCatalogProps {
   courses: Course[];
@@ -35,6 +36,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
   onOpenCreateCourse,
   onOpenAdminLogin
 }) => {
+  const { permissions, openAuthModal } = useAuthStore();
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -199,7 +201,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
               />
             </div>
 
-            {adminUser ? (
+            {permissions.canEditCourse ? (
               <button
                 onClick={onOpenCreateCourse}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-sm shadow-indigo-500/20 whitespace-nowrap cursor-pointer transition-all"
@@ -209,7 +211,7 @@ export const CourseCatalog: React.FC<CourseCatalogProps> = ({
               </button>
             ) : (
               <button
-                onClick={onOpenAdminLogin}
+                onClick={() => openAuthModal('presets', 'canEditCourse')}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 whitespace-nowrap cursor-pointer transition-all"
               >
                 <Plus className="w-4 h-4 text-indigo-500" />

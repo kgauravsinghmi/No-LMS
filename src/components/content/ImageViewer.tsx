@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { sanitizeUrl } from '../../utils/sanitize';
 import {
   Maximize2,
   Minimize2,
@@ -19,6 +20,7 @@ interface ImageViewerProps {
 }
 
 export const ImageViewer: React.FC<ImageViewerProps> = ({ src, alt, caption, className }) => {
+  const safeSrc = sanitizeUrl(src);
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [hasError, setHasError] = useState<boolean>(false);
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
@@ -56,7 +58,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ src, alt, caption, cla
               <Maximize2 className="w-3.5 h-3.5" />
             </button>
             <a
-              href={src}
+              href={safeSrc}
               target="_blank"
               rel="noopener noreferrer"
               className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
@@ -91,7 +93,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ src, alt, caption, cla
             </div>
           ) : (
             <img
-              src={src}
+              src={safeSrc}
               alt={alt || caption || 'Diagram Image'}
               onLoad={() => setIsLoaded(true)}
               onError={() => setHasError(true)}
@@ -176,7 +178,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ src, alt, caption, cla
             className="flex-1 w-full flex items-center justify-center p-4 overflow-auto cursor-zoom-out"
           >
             <img
-              src={src}
+              src={safeSrc}
               alt={alt || caption || 'Diagram preview'}
               style={{ transform: `scale(${zoom})` }}
               className="max-h-[82vh] max-w-full object-contain rounded-2xl shadow-2xl transition-transform duration-200 cursor-default"

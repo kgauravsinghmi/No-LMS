@@ -15,6 +15,7 @@ import {
   X
 } from 'lucide-react';
 import { QuizQuestion } from '../../types';
+import { sanitizeUrl } from '../../utils/sanitize';
 import { MindmapViewer } from './MindmapViewer';
 import { ImageViewer } from './ImageViewer';
 import { MermaidViewer } from './MermaidViewer';
@@ -512,7 +513,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         let borderClass = 'border-indigo-200 bg-indigo-50/50 dark:bg-indigo-950/30 dark:border-indigo-800/50 text-indigo-950 dark:text-indigo-200';
         let label = 'Note';
 
-        if (blockquoteType === 'tip') {
+        if (blockquoteType === 'note') {
+          icon = <Info className="w-5 h-5 shrink-0 text-indigo-600 dark:text-indigo-400 mt-0.5" />;
+          borderClass = 'border-indigo-200 bg-indigo-50/50 dark:bg-indigo-950/30 dark:border-indigo-800/50 text-indigo-950 dark:text-indigo-200';
+          label = 'Note';
+        } else if (blockquoteType === 'tip') {
           icon = <Lightbulb className="w-5 h-5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />;
           borderClass = 'border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/30 dark:border-emerald-800/50 text-emerald-950 dark:text-emerald-200';
           label = 'Pro Tip';
@@ -1160,10 +1165,12 @@ function renderPlainWithAutolinks(text: string, baseKey: string | number): React
         isExternal = false;
       }
 
+      const safeHref = sanitizeUrl(href);
+
       return (
         <React.Fragment key={`${baseKey}-autolink-${idx}`}>
           <a
-            href={href}
+            href={safeHref}
             target={isExternal ? '_blank' : undefined}
             rel={isExternal ? 'noopener noreferrer' : undefined}
             className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline inline-flex items-center gap-0.5 break-all cursor-pointer"
@@ -1242,7 +1249,7 @@ function renderInlineFormatting(text: string): React.ReactNode {
         return (
           <a
             key={index}
-            href={href}
+            href={sanitizeUrl(href)}
             target={isExternal ? '_blank' : undefined}
             rel={isExternal ? 'noopener noreferrer' : undefined}
             className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline inline-flex items-center gap-0.5 break-all cursor-pointer"
@@ -1320,7 +1327,7 @@ function renderInlineFormatting(text: string): React.ReactNode {
     // Markdown Link: [text](url)
     const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
     if (linkMatch) {
-      const linkHref = linkMatch[2];
+      const linkHref = sanitizeUrl(linkMatch[2]);
       const isMailto = linkHref.startsWith('mailto:');
       return (
         <a

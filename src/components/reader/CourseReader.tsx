@@ -26,15 +26,25 @@ import {
   Copy,
   Download,
   AlertCircle,
-  CheckCheck
+  CheckCheck,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Course, UserProgress, AdminUser } from '../../types';
 import { GRADIENT_THEMES } from '../../utils/theme';
 import { getCourseIcon } from '../../utils/icons';
 import { MarkdownRenderer } from '../content/MarkdownRenderer';
-import { storageService } from '../../services/storage';
 import { calculateMedalTier, getMedalTierLabel, getMedalTierColors, getMedalIcon } from '../../utils/badges';
+import { useUIStore, ReaderFontSize } from '../../stores/useUIStore';
+import { storageService } from '../../services/storage';
+import {
+  useToggleTopicMutation,
+  useToggleBookmarkMutation,
+  useSaveNoteMutation,
+  useSaveQuizMutation
+} from '../../services/api/queries';
 
 interface CourseReaderProps {
   course: Course;
@@ -57,6 +67,24 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
   onProgressUpdate,
   onOpenCertificate
 }) => {
+  // Zustand Global UI Store Integration (Zen Mode, Zoom, Font Size)
+  const {
+    isZenMode,
+    toggleZenMode,
+    readerFontSize,
+    setReaderFontSize,
+    readerZoom,
+    zoomIn,
+    zoomOut,
+    resetZoom,
+  } = useUIStore();
+
+  // TanStack React Query Optimistic Mutations
+  const toggleTopicMutation = useToggleTopicMutation();
+  const toggleBookmarkMutation = useToggleBookmarkMutation();
+  const saveNoteMutation = useSaveNoteMutation();
+  const saveQuizMutation = useSaveQuizMutation();
+
   // Find initial topic or first topic
   const allTopics = useMemo(() => {
     return course.modules.flatMap(m => m.topics.map(t => ({ ...t, moduleId: m.id, moduleTitle: m.title })));
@@ -78,46 +106,37 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
     return map;
   });
 
-  // Reader UI settings with persistent font scale
-  const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg' | 'xl'>(() => {
-    try {
-      const saved = localStorage.getItem('luminary_reader_font_size');
-      if (saved === 'sm' || saved === 'base' || saved === 'lg' || saved === 'xl') return saved;
-    } catch {
-      // fallback
-    }
-    return 'base';
-  });
-
-  const handleSetFontSize = (size: 'sm' | 'base' | 'lg' | 'xl') => {
-    setFontSize(size);
-    try {
-      localStorage.setItem('luminary_reader_font_size', size);
-    } catch {
-      // ignore
-    }
-  };
+  // Keyboard shortcut Ctrl/Cmd+Shift+F for Zen Mode toggle
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
+        e.preventDefault();
+        toggleZenMode();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleZenMode]);
 
   const decreaseFontSize = () => {
-    if (fontSize === 'xl') handleSetFontSize('lg');
-    else if (fontSize === 'lg') handleSetFontSize('base');
-    else if (fontSize === 'base') handleSetFontSize('sm');
+    if (readerFontSize === 'xl') setReaderFontSize('lg');
+    else if (readerFontSize === 'lg') setReaderFontSize('base');
+    else if (readerFontSize === 'base') setReaderFontSize('sm');
   };
 
   const increaseFontSize = () => {
-    if (fontSize === 'sm') handleSetFontSize('base');
-    else if (fontSize === 'base') handleSetFontSize('lg');
-    else if (fontSize === 'lg') handleSetFontSize('xl');
+    if (readerFontSize === 'sm') setReaderFontSize('base');
+    else if (readerFontSize === 'base') setReaderFontSize('lg');
+    else if (readerFontSize === 'lg') setReaderFontSize('xl');
   };
 
-  const fontSizeLabels: Record<'sm' | 'base' | 'lg' | 'xl', { label: string; pct: string; desc: string }> = {
+  const fontSizeLabels: Record<ReaderFontSize, { label: string; pct: string; desc: string }> = {
     sm: { label: 'A-', pct: '90%', desc: 'Compact' },
     base: { label: 'A', pct: '100%', desc: 'Standard' },
     lg: { label: 'A+', pct: '115%', desc: 'Large' },
     xl: { label: 'A++', pct: '130%', desc: 'Extra Large' }
   };
 
-  const [isZenMode, setIsZenMode] = useState<boolean>(false);
   const [sidebarSearch, setSidebarSearch] = useState<string>('');
   const [showNotesDrawer, setShowNotesDrawer] = useState<boolean>(false);
   const [noteContent, setNoteContent] = useState<string>('');
@@ -207,33 +226,54 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
   const isCurrentTopicCompleted = activeTopicId ? progress.completedTopicIds.includes(activeTopicId) : false;
   const isCurrentTopicBookmarked = activeTopicId ? progress.bookmarkedTopicIds.includes(activeTopicId) : false;
 
-  const handleToggleCompleted = () => {
+  const handleToggleCompleted = async () => {
     if (!activeTopicId) return;
-    const isNowCompleted = storageService.toggleTopicCompleted(activeTopicId);
-
-    // If completed and triggered, shoot celebratory confetti
-    if (isNowCompleted) {
-      confetti({
-        particleCount: 60,
-        spread: 60,
-        origin: { y: 0.8 },
-        colors: ['#6366f1', '#a855f7', '#ec4899', '#10b981']
-      });
+    try {
+      const result = await toggleTopicMutation.mutateAsync(activeTopicId);
+      if (result.isCompleted) {
+        confetti({
+          particleCount: 60,
+          spread: 60,
+          origin: { y: 0.8 },
+          colors: ['#6366f1', '#a855f7', '#ec4899', '#10b981']
+        });
+      }
+      onProgressUpdate(result.progress);
+    } catch {
+      const isNowCompleted = storageService.toggleTopicCompleted(activeTopicId);
+      if (isNowCompleted) {
+        confetti({
+          particleCount: 60,
+          spread: 60,
+          origin: { y: 0.8 },
+          colors: ['#6366f1', '#a855f7', '#ec4899', '#10b981']
+        });
+      }
+      onProgressUpdate(storageService.getProgress());
     }
-
-    onProgressUpdate(storageService.getProgress());
   };
 
-  const handleCompleteAndNext = () => {
+  const handleCompleteAndNext = async () => {
     if (activeTopicId && !isCurrentTopicCompleted) {
-      storageService.toggleTopicCompleted(activeTopicId);
-      confetti({
-        particleCount: 75,
-        spread: 70,
-        origin: { y: 0.8 },
-        colors: ['#6366f1', '#a855f7', '#ec4899', '#10b981']
-      });
-      onProgressUpdate(storageService.getProgress());
+      try {
+        const result = await toggleTopicMutation.mutateAsync(activeTopicId);
+        confetti({
+          particleCount: 75,
+          spread: 70,
+          origin: { y: 0.8 },
+          colors: ['#6366f1', '#a855f7', '#ec4899', '#10b981']
+        });
+        onProgressUpdate(result.progress);
+      } catch {
+        storageService.toggleTopicCompleted(activeTopicId);
+        confetti({
+          particleCount: 75,
+          spread: 70,
+          origin: { y: 0.8 },
+          colors: ['#6366f1', '#a855f7', '#ec4899', '#10b981']
+        });
+        onProgressUpdate(storageService.getProgress());
+      }
     }
     if (nextTopic) {
       setActiveTopicId(nextTopic.id);
@@ -253,25 +293,40 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleToggleBookmark = () => {
+  const handleToggleBookmark = async () => {
     if (!activeTopicId) return;
-    storageService.toggleBookmark(activeTopicId);
-    onProgressUpdate(storageService.getProgress());
-  };
-
-  const handleSaveNote = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const text = e.target.value;
-    setNoteContent(text);
-    if (activeTopicId) {
-      storageService.saveNote(activeTopicId, text);
+    try {
+      const result = await toggleBookmarkMutation.mutateAsync(activeTopicId);
+      onProgressUpdate(result.progress);
+    } catch {
+      storageService.toggleBookmark(activeTopicId);
       onProgressUpdate(storageService.getProgress());
     }
   };
 
-  const handleQuizSubmit = (score: number, total: number) => {
+  const handleSaveNote = async (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value;
+    setNoteContent(text);
     if (activeTopicId) {
-      storageService.saveQuizResult(activeTopicId, score, total);
-      onProgressUpdate(storageService.getProgress());
+      try {
+        const updatedProgress = await saveNoteMutation.mutateAsync({ topicId: activeTopicId, noteText: text });
+        onProgressUpdate(updatedProgress);
+      } catch {
+        storageService.saveNote(activeTopicId, text);
+        onProgressUpdate(storageService.getProgress());
+      }
+    }
+  };
+
+  const handleQuizSubmit = async (score: number, total: number) => {
+    if (activeTopicId) {
+      try {
+        const updatedProgress = await saveQuizMutation.mutateAsync({ topicId: activeTopicId, score, total });
+        onProgressUpdate(updatedProgress);
+      } catch {
+        storageService.saveQuizResult(activeTopicId, score, total);
+        onProgressUpdate(storageService.getProgress());
+      }
 
       const medalTier = calculateMedalTier(score, total);
       const isPerfect = score === total;
@@ -392,11 +447,40 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
             <span className="hidden sm:inline">Notes</span>
           </button>
 
+          {/* Zoom Controls (- / + / reset) */}
+          <div className="hidden lg:flex items-center border border-slate-200 dark:border-slate-700/80 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-2xs">
+            <button
+              onClick={zoomOut}
+              disabled={readerZoom <= 75}
+              className="p-1.5 sm:px-2 sm:py-1 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700/80"
+              title="Zoom Out (Ctrl -)"
+              aria-label="Zoom Out"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={resetZoom}
+              className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-mono font-bold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50/50 dark:bg-slate-800/30 select-none cursor-pointer"
+              title="Reset Zoom to 100%"
+            >
+              <span>{readerZoom}%</span>
+            </button>
+            <button
+              onClick={zoomIn}
+              disabled={readerZoom >= 150}
+              className="p-1.5 sm:px-2 sm:py-1 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border-l border-slate-200 dark:border-slate-700/80"
+              title="Zoom In (Ctrl +)"
+              aria-label="Zoom In"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {/* Font Size Adjuster (- and + Stepper & Presets) */}
           <div className="flex items-center border border-slate-200 dark:border-slate-700/80 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-2xs">
             <button
               onClick={decreaseFontSize}
-              disabled={fontSize === 'sm'}
+              disabled={readerFontSize === 'sm'}
               className="p-1.5 sm:px-2 sm:py-1 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700/80"
               title="Decrease font size (-)"
               aria-label="Decrease font size"
@@ -406,16 +490,16 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
 
             <div className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/30 select-none">
               <Type className="w-3 h-3 text-indigo-500" />
-              <span>{fontSizeLabels[fontSize].pct}</span>
+              <span>{fontSizeLabels[readerFontSize].pct}</span>
             </div>
 
             <div className="hidden md:flex items-center border-l border-slate-200 dark:border-slate-700/80">
               {(['sm', 'base', 'lg', 'xl'] as const).map((size) => (
                 <button
                   key={size}
-                  onClick={() => handleSetFontSize(size)}
+                  onClick={() => setReaderFontSize(size)}
                   className={`px-2 py-1 text-[11px] font-bold transition-all cursor-pointer ${
-                    fontSize === size
+                    readerFontSize === size
                       ? 'bg-indigo-600 text-white shadow-inner'
                       : 'text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
@@ -428,7 +512,7 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
 
             <button
               onClick={increaseFontSize}
-              disabled={fontSize === 'xl'}
+              disabled={readerFontSize === 'xl'}
               className="p-1.5 sm:px-2 sm:py-1 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border-l border-slate-200 dark:border-slate-700/80"
               title="Increase font size (+)"
               aria-label="Increase font size"
@@ -439,13 +523,13 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
 
           {/* Zen / Focus Mode Toggle */}
           <button
-            onClick={() => setIsZenMode(!isZenMode)}
+            onClick={toggleZenMode}
             className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${
               isZenMode
                 ? 'bg-indigo-600 text-white border-indigo-600'
                 : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
-            title={isZenMode ? 'Exit Zen Reading Mode' : 'Enter Zen Reading Mode'}
+            title={isZenMode ? 'Exit Zen Reading Mode (Cmd/Ctrl+Shift+F)' : 'Enter Zen Reading Mode (Cmd/Ctrl+Shift+F)'}
           >
             {isZenMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
@@ -588,7 +672,11 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
           <main className={`flex-1 min-w-0 transition-all ${isZenMode ? 'max-w-4xl lg:max-w-5xl mx-auto' : ''}`}>
 
             {activeTopicInfo ? (
-              <article ref={articleTopRef} className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-10 lg:p-12 shadow-xs">
+              <article
+                ref={articleTopRef}
+                style={{ zoom: readerZoom !== 100 ? `${readerZoom}%` : undefined }}
+                className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-10 lg:p-12 shadow-xs transition-transform"
+              >
 
                 {/* Topic Header */}
                 <header className="border-b border-slate-100 dark:border-slate-800/80 pb-8 mb-8">
@@ -668,7 +756,7 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
                 <div className="py-2">
                   <MarkdownRenderer
                     content={activeTopicInfo.topic.content}
-                    fontSize={fontSize}
+                    fontSize={readerFontSize}
                     onHeadingsExtracted={setHeadings}
                     quiz={activeTopicInfo.topic.quiz}
                     topicId={activeTopicInfo.topic.id}

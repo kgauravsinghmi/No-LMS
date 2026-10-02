@@ -11,13 +11,13 @@ import {
   RefreshCw,
   Award,
   Sparkles,
-  LogOut,
-  ChevronDown,
-  Layers,
-  Zap
+  Zap,
+  Lock
 } from 'lucide-react';
 import { AdminUser, Course, UserProgress, ViewMode } from '../../types';
 import { storageService } from '../../services/storage';
+import { UserMenu } from '../auth/UserMenu';
+import { useAuthStore } from '../../stores/useAuthStore';
 
 interface HeaderProps {
   currentView: ViewMode;
@@ -48,6 +48,7 @@ export const Header: React.FC<HeaderProps> = ({
   onDataReset,
   onImportSuccess
 }) => {
+  const { permissions, openAuthModal } = useAuthStore();
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -222,16 +223,30 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
 
                   <button
-                    onClick={handleExport}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors"
+                    onClick={() => {
+                      if (!permissions.canExportDatabase) {
+                        openAuthModal('presets', 'canExportDatabase');
+                        setShowSettingsMenu(false);
+                        return;
+                      }
+                      handleExport();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
                   >
                     <Download className="w-4 h-4 text-indigo-500" />
                     <span>Export Database (JSON)</span>
                   </button>
 
                   <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors"
+                    onClick={() => {
+                      if (!permissions.canImportDatabase) {
+                        openAuthModal('presets', 'canImportDatabase');
+                        setShowSettingsMenu(false);
+                        return;
+                      }
+                      fileInputRef.current?.click();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
                   >
                     <Upload className="w-4 h-4 text-emerald-500" />
                     <span>Import Database</span>
@@ -246,12 +261,17 @@ export const Header: React.FC<HeaderProps> = ({
 
                   <button
                     onClick={() => {
+                      if (!permissions.canResetSystem) {
+                        openAuthModal('presets', 'canResetSystem');
+                        setShowSettingsMenu(false);
+                        return;
+                      }
                       if (confirm('Reset courses to initial default sample curriculum? Any custom courses will be replaced.')) {
                         onDataReset();
                         setShowSettingsMenu(false);
                       }
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-left transition-colors mt-1 border-t border-slate-100 dark:border-slate-800"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-left transition-colors mt-1 border-t border-slate-100 dark:border-slate-800 cursor-pointer"
                   >
                     <RefreshCw className="w-4 h-4 text-rose-500" />
                     <span>Reset to Default Courses</span>
@@ -261,38 +281,32 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* Admin Studio Portal Button */}
-          {adminUser ? (
-            <div className="flex items-center gap-1.5 pl-1">
-              <button
-                onClick={() => onNavigate(currentView === 'admin' ? 'catalog' : 'admin')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
-                  currentView === 'admin'
-                    ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm'
-                    : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800 hover:bg-indigo-100'
-                }`}
-              >
-                <Shield className="w-3.5 h-3.5" />
-                <span>{currentView === 'admin' ? 'Exit Studio' : 'Admin Studio'}</span>
-              </button>
-
-              <button
-                onClick={onLogoutAdmin}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                title="Log out Admin session"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
+          {/* Admin / Authoring Studio Button */}
+          {permissions.canAccessAdminStudio ? (
             <button
-              onClick={onOpenAdminLogin}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 transition-all shadow-xs"
+              onClick={() => onNavigate(currentView === 'admin' ? 'catalog' : 'admin')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                currentView === 'admin'
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm'
+                  : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'
+              }`}
             >
               <Shield className="w-3.5 h-3.5" />
-              <span>Admin Login</span>
+              <span>{currentView === 'admin' ? 'Exit Studio' : 'Author Studio'}</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => openAuthModal('presets', 'canAccessAdminStudio')}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+              title="Switch role to Admin or Instructor to open Studio"
+            >
+              <Lock className="w-3.5 h-3.5 text-slate-400" />
+              <span>Studio</span>
             </button>
           )}
+
+          {/* User Persona & Role Switcher Menu */}
+          <UserMenu />
 
         </div>
       </div>

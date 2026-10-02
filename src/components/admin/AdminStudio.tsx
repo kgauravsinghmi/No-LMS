@@ -49,7 +49,8 @@ import {
   FilePlus,
   RefreshCw,
   Sliders,
-  CheckCircle2
+  CheckCircle2,
+  HardDriveDownload
 } from 'lucide-react';
 import { Course, Module, Topic, QuizQuestion, GradientTheme, AdminUser } from '../../types';
 import { GRADIENT_THEMES } from '../../utils/theme';
@@ -57,6 +58,8 @@ import { AVAILABLE_ICONS, getCourseIcon } from '../../utils/icons';
 import { storageService } from '../../services/storage';
 import { MarkdownRenderer } from '../content/MarkdownRenderer';
 import { ImageInsertModal } from './ImageInsertModal';
+import { useUIStore } from '../../stores/useUIStore';
+import { useDraftAutoSave } from '../../hooks/useDraftAutoSave';
 
 interface AdminStudioProps {
   adminUser: AdminUser;
@@ -183,11 +186,23 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
   const [selectedModuleId, setSelectedModuleId] = useState<string>(initialModuleId || '');
   const [selectedTopicId, setSelectedTopicId] = useState<string>(initialTopicId || '');
 
-  // Workspace Layout & Zen Mode States
-  const [isZenMode, setIsZenMode] = useState<boolean>(false);
-  const [isOutlineOpen, setIsOutlineOpen] = useState<boolean>(true);
-  const [isPreviewOpen, setIsPreviewOpen] = useState<boolean>(true);
-  const [previewViewport, setPreviewViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+  // Zustand Global UI Store Integration
+  const {
+    isZenMode,
+    toggleZenMode,
+    setZenMode,
+    editorOutlineCollapsed,
+    toggleEditorOutline,
+    editorPreviewCollapsed,
+    toggleEditorPreview,
+    editorPreviewDevice,
+    setEditorPreviewDevice,
+  } = useUIStore();
+
+  const isOutlineOpen = !editorOutlineCollapsed;
+  const isPreviewOpen = !editorPreviewCollapsed;
+  const previewViewport = editorPreviewDevice;
+  const setPreviewViewport = setEditorPreviewDevice;
   const [activeEditorTab, setActiveEditorTab] = useState<'editor' | 'meta' | 'quiz' | 'takeaways'>('editor');
 
   // Expanded Modules in Outline Tree
@@ -260,13 +275,48 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
     return () => clearTimeout(timer);
   }, [topicForm.content]);
 
+  // Dual-Tier Offline Auto-Save Engine (IndexedDB + localStorage fallback)
+  const {
+    recoverableDraft,
+    restoreDraft,
+    discardDraft,
+    status: autoSaveStatus,
+  } = useDraftAutoSave({
+    courseId: selectedCourseId,
+    moduleId: selectedModuleId,
+    topic: activeTopic,
+    currentData: {
+      title: topicForm.title,
+      slug: topicForm.slug,
+      summary: topicForm.summary,
+      readingTimeMinutes: topicForm.readingTimeMinutes,
+      keyTakeaways: topicForm.keyTakeaways,
+      quiz: topicForm.quiz,
+      content: topicForm.content,
+    },
+    onRestoreDraft: (restoredData) => {
+      setTopicForm({
+        title: restoredData.title || '',
+        slug: restoredData.slug || '',
+        summary: restoredData.summary || '',
+        readingTimeMinutes: restoredData.readingTimeMinutes || 5,
+        keyTakeaways: restoredData.keyTakeaways ? [...restoredData.keyTakeaways] : [],
+        newTakeaway: '',
+        quiz: restoredData.quiz ? JSON.parse(JSON.stringify(restoredData.quiz)) : [],
+        content: restoredData.content || '',
+      });
+      setDebouncedContent(restoredData.content || '');
+      setIsDirty(true);
+    },
+  });
+
   // Global Keyboard Shortcut for Zen Mode (Cmd/Ctrl + Shift + F) & Escape to Exit
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Toggle Zen Mode: Cmd/Ctrl + Shift + F
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
         e.preventDefault();
-        setIsZenMode((prev) => !prev);
+        toggleZenMode();
       }
       // Save Shortcut: Cmd/Ctrl + S
       if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
@@ -275,13 +325,13 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
       }
       // Exit Zen Mode: Escape
       if (e.key === 'Escape' && isZenMode) {
-        setIsZenMode(false);
+        setZenMode(false);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isZenMode, topicForm, activeCourse, activeModule, activeTopic]);
+  }, [isZenMode, toggleZenMode, setZenMode, topicForm, activeCourse, activeModule, activeTopic]);
 
   // Sync state when selected Topic changes
   useEffect(() => {
@@ -496,6 +546,7 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
 
     storageService.saveCourses(updatedCourses);
     onCoursesUpdated();
+    discardDraft();
     setIsDirty(false);
     setSaveStatus('saved');
 
@@ -790,7 +841,7 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
           {/* Outline Sidebar Toggle Button */}
           {!isZenMode && (
             <button
-              onClick={() => setIsOutlineOpen((prev) => !prev)}
+              onClick={toggleEditorOutline}
               className={`p-2 rounded-xl transition-colors cursor-pointer ${
                 isOutlineOpen
                   ? 'bg-indigo-500/[0.08] text-indigo-600 dark:text-indigo-400'
@@ -852,13 +903,38 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
           )}
         </div>
 
-        {/* Right: Workspace Controls, Zen Toggle, Preview Toggle, Save Button */}
+        {/* Right: Workspace Controls, Auto-Save Status, Zen Toggle, Preview Toggle, Save Button */}
         <div className="flex items-center gap-2">
+
+          {/* Live Auto-Save / IndexedDB Status Indicator */}
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/[0.04] text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+            {autoSaveStatus === 'saving' ? (
+              <>
+                <RefreshCw className="w-3 h-3 animate-spin text-indigo-500" />
+                <span>Saving draft...</span>
+              </>
+            ) : autoSaveStatus === 'unsaved_draft' ? (
+              <>
+                <Clock className="w-3 h-3 text-amber-500" />
+                <span>Unsaved draft</span>
+              </>
+            ) : autoSaveStatus === 'recovered' ? (
+              <>
+                <Sparkles className="w-3 h-3 text-indigo-500" />
+                <span>Draft restored</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                <span>Draft synced</span>
+              </>
+            )}
+          </div>
 
           {/* Live Preview Toggle Button (When not in Zen Mode) */}
           {!isZenMode && (
             <button
-              onClick={() => setIsPreviewOpen((prev) => !prev)}
+              onClick={toggleEditorPreview}
               className={`p-2 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${
                 isPreviewOpen
                   ? 'bg-indigo-500/[0.08] text-indigo-600 dark:text-indigo-400'
@@ -873,7 +949,7 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
 
           {/* Zen Mode Toggle Button */}
           <button
-            onClick={() => setIsZenMode((prev) => !prev)}
+            onClick={toggleZenMode}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
               isZenMode
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
@@ -931,6 +1007,34 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
 
         </div>
       </header>
+
+      {/* -------------------------------------------------------------------- */}
+      {/* OFFLINE DRAFT RECOVERY NOTIFICATION BANNER (Dual-Tier Persistence)   */}
+      {/* -------------------------------------------------------------------- */}
+      {recoverableDraft && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2.5 flex items-center justify-between text-xs animate-fade-in z-20">
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-medium">
+            <HardDriveDownload className="w-4 h-4 text-amber-500 shrink-0" />
+            <span>
+              <strong>Recoverable Draft Found:</strong> You have an unsaved local draft for this topic from {new Date(recoverableDraft.savedAt).toLocaleTimeString()}.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={restoreDraft}
+              className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold transition-colors shadow-2xs cursor-pointer"
+            >
+              Restore Draft
+            </button>
+            <button
+              onClick={discardDraft}
+              className="px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* -------------------------------------------------------------------- */}
       {/* MAIN WORKSPACE: THREE-COLUMN RESPONSIVE LAYOUT                        */}
