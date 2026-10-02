@@ -2,20 +2,22 @@
 
 # 🎓 Luminary LMS
 
-**Next-Generation Self-Contained Interactive Learning & Technical Course Studio**
+**Next-Generation Self-Contained Interactive Learning, Technical Course Studio & Enterprise RBAC Platform**
 
 [![React](https://img.shields.io/badge/React-19.2-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-8.3-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4.3-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![Mermaid.js](https://img.shields.io/badge/Mermaid-12.0-FF3670?style=flat-square&logo=mermaid&logoColor=white)](https://mermaid.js.org/)
+[![Zustand](https://img.shields.io/badge/State-Zustand-orange?style=flat-square)](https://github.com/pmndrs/zustand)
+[![DOMPurify](https://img.shields.io/badge/Security-DOMPurify-blueviolet?style=flat-square)](https://github.com/cure53/DOMPurify)
+[![Vitest](https://img.shields.io/badge/Tests-84%20Passing-green?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 
 <p align="center">
-  A modern, ultra-responsive, and zero-backend-required Learning Management Platform. Designed for engineers, technical writers, educators, and self-learners to author rich interactive courses, render complex architectural diagrams, and master technical skills with gamified rewards.
+  A modern, ultra-responsive, zero-backend-required Learning Management Platform with enterprise-grade Role-Based Access Control (RBAC), distraction-free Markdown authoring, visual diagramming (Mermaid & Mindmaps), strict XSS sanitization, and gamified progress tracking.
 </p>
 
-[Key Features](#-key-capabilities) • [Architecture](#-architecture--directory-layout) • [Getting Started](#-getting-started) • [Design System](#-design-system--8pt-grid) • [Keyboard Shortcuts](#-keyboard-shortcuts) • [Contributing](#-contributing)
+[Key Features](#-key-capabilities) • [Security & RBAC](#-security--access-control) • [Architecture](#-architecture--directory-layout) • [Getting Started](#-getting-started) • [Testing & QA](#-testing--quality-assurance) • [Design System](#-design-system--8pt-grid) • [Contributing](#-contributing)
 
 ---
 
@@ -23,38 +25,81 @@
 
 ## ✨ Key Capabilities
 
-### 🛠️ 1. Course Studio & Authoring Suite
-- **Three-Column Responsive Workspace**:
-  - **Left (20%)**: Collapsible course outline and module/topic hierarchy with instant navigation.
-  - **Middle (40%)**: Raw Markdown editor in a crisp monospace font (`text-[14px] leading-[1.6] font-mono`) with toolbar shortcuts.
-  - **Right (40%)**: Live preview pane with responsive viewport simulation (Desktop, Tablet, Mobile).
-- **Zen Mode (`Cmd/Ctrl + Shift + F`)**: Instantly collapses navigation and preview panes, focusing into an **800px max-width** centered authoring canvas for distraction-free writing.
-- **350ms Debounced Preview**: Live typing state is decoupled from rendering to ensure smooth 60fps typing even during heavy Mermaid or KaTeX compilations.
-- **Client-Side Media Compression**: Drag-and-drop or paste images from the clipboard—automatically converted via `<canvas>` to optimized WebP format with automated Markdown figure captions.
-- **Interactive Quiz Builder**: Build multiple-choice assessments with answer explanations and instant verification.
-- **Course Metadata & Theming**: Configure difficulty badges, estimated reading times, takeaway summaries, and customizable gradient banners.
+### 🛡️ 1. Enterprise RBAC & Multi-Provider Authentication
+- **4 Distinct Personas**: Full permission boundaries for **Admin**, **Instructor**, **Student / Learner**, and **Guest Explorer**.
+- **Instant Role Preset Switching**: One-click persona switcher for local development, presentations, and testing.
+- **JWT & OAuth2 / Supabase Federation**: Mock 3-part JWT token generator (`header.payload.signature`) with automated expiration, domain-based role resolution, and federated SSO connectors.
+- **Declarative `<RoleGuard />` Barriers**: Protect administrative views and action buttons with contextual upgrade prompts.
+- **Reactive Zustand Store**: `useAuthStore` managing session tokens, user profiles, active permissions, and auth modals.
 
-### 📖 2. Distraction-Free Interactive Reader
+### 🔒 2. Strict XSS Prevention & DOM Sanitization
+- **DOMPurify HTML Sanitization**: Deep HTML filtering for custom Markdown, callouts, and raw HTML blocks with whitelisted tags and dangerous protocol rejection (`javascript:`, `vbscript:`, malicious `data:` URIs).
+- **SVG & Mermaid Sanitization**: Dedicated SVG profile (`USE_PROFILES: { svg: true, svgFilters: true }`) protecting dynamic diagram elements while preserving markers, curves, gradients, and filters.
+- **External Link Security**: Automatic injection of `target="_blank"` and `rel="noopener noreferrer"` for external hyperlinks.
+
+### 🛠️ 3. Course Studio & Distraction-Free Authoring
+- **Three-Column Responsive Workspace**:
+  - **Left (20%)**: Collapsible course outline and module/topic hierarchy with drag-and-drop navigation.
+  - **Middle (40%)**: Raw Markdown editor in a crisp monospace font (`text-[14px] leading-[1.6] font-mono`) with quick-insert toolbar.
+  - **Right (40%)**: Live preview pane with responsive viewport simulation (Desktop, Tablet, Mobile).
+- **Zen Mode (`Cmd/Ctrl + Shift + F`)**: Instantly collapses sidebars into an **800px max-width** centered canvas for focused writing.
+- **350ms Debounced Preview**: Typing state is decoupled from live compilation to maintain smooth 60fps responsiveness during heavy Mermaid or KaTeX parses.
+- **Client-Side Media Compression**: Drag-and-drop or paste images from the clipboard—automatically converted via `<canvas>` to optimized WebP format with automated figure captions.
+- **Interactive Quiz Builder**: Build multiple-choice assessments with real-time feedback and explanation fields.
+
+### 📖 4. Interactive Learning & Reader Canvas
 - **Typography & Ergonomics**: Engineered with `Outfit` headers, `Plus Jakarta Sans` body, and `JetBrains Mono` code blocks for optimal legibility.
 - **Reading Metrics**: Real-time reading time calculation and word counts.
 - **Quick Action Utilities**:
   - **Copy Takeaways**: One-click extraction of key topic points to clipboard.
-  - **Export Notes**: Export formatted Markdown notes (`.md`) for personal knowledge bases (Obsidian, Notion, Logseq).
+  - **Export Notes**: Export formatted Markdown notes (`.md`) directly for Obsidian, Notion, and Logseq.
 - **Embedded Quiz Testing Engine**: Interactive inline testing with instant feedback, explanations, and XP rewards.
 
-### 📊 3. Visual Diagramming & Formula Suite
+### 📊 5. Visual Diagramming & Mathematical Formulas
 - **Mermaid.js 12 Visualizations**: Native rendering for Flowcharts, Sequence diagrams, Mindmaps (with horizontal SVG curve trees), ER diagrams, Git graphs, Architecture C4 diagrams, Quadrant charts, and Kanban boards.
 - **Interactive Diagram Modal**: Fullscreen zoom, pan, and SVG export capabilities for high-density architectural charts.
 - **Mathematical Typography**: Seamless KaTeX LaTeX math support for inline formulas (`$E = mc^2$`) and display equation blocks (`$$\sum_{i=1}^{n} x_i$$`).
 
-### 🏆 4. Gamification & Progression System
+### 🏆 6. Gamification & Progression System
 - **Tiered Medal & Badges**: Unlock Bronze, Silver, Gold, Platinum, and Diamond achievements across learning milestones (Topics Mastered, Perfect Quizzes, Course Completions, Reading Streaks).
 - **Celebration Confetti**: Physics-based confetti celebration effects on course and quiz completions powered by `canvas-confetti`.
 - **Verified Completion Certificates**: Generate printable and downloadable certificates upon completing all course modules.
 
-### ⚡ 5. Reference & Cheat Sheet Hub
+### ⚡ 7. Reference & Cheat Sheet Hub
 - Comprehensive quick-reference sheets covering Data Structures, Algorithms, System Design, Git, SQL, Docker, Python, and TypeScript.
 - Live search filtering and one-click code copy.
+
+---
+
+## 🔐 Security & Access Control
+
+### Role-Based Permission Matrix
+
+| Permission Capability | Admin | Instructor | Student / Learner | Guest Explorer |
+| :--- | :---: | :---: | :---: | :---: |
+| **Course Authoring (`canEditCourse`)** | ✅ | ✅ | ❌ | ❌ |
+| **Publish Courses (`canPublishCourse`)** | ✅ | ✅ | ❌ | ❌ |
+| **Delete Courses (`canDeleteCourse`)** | ✅ | ❌ | ❌ | ❌ |
+| **Access Admin Studio (`canAccessAdminStudio`)** | ✅ | ✅ | ❌ | ❌ |
+| **Learner Analytics (`canViewAnalytics`)** | ✅ | ✅ | ❌ | ❌ |
+| **User Management (`canManageUsers`)** | ✅ | ❌ | ❌ | ❌ |
+| **Export Database (`canExportDatabase`)** | ✅ | ✅ | ❌ | ❌ |
+| **Import Database (`canImportDatabase`)** | ✅ | ❌ | ❌ | ❌ |
+| **System Reset (`canResetSystem`)** | ✅ | ❌ | ❌ | ❌ |
+| **Take Quizzes (`canTakeQuiz`)** | ✅ | ✅ | ✅ | ✅ |
+| **Submit Notes (`canSubmitNotes`)** | ✅ | ✅ | ✅ | ❌ |
+| **Bookmark Topics (`canBookmark`)** | ✅ | ✅ | ✅ | ❌ |
+
+### Declarative Role Guard Example
+
+```tsx
+import { RoleGuard } from './components/auth/RoleGuard';
+
+// Wrap restricted views or buttons
+<RoleGuard requiredPermission="canEditCourse">
+  <button onClick={handleEditTopic}>Edit Topic Content</button>
+</RoleGuard>
+```
 
 ---
 
@@ -63,8 +108,6 @@
 ```
 No-LMS/
 ├── images/                       # Sample illustrations & screenshots
-│   ├── information_system.png
-│   └── People_hard.png
 ├── public/                       # Static public assets & icons
 │   ├── favicon.svg
 │   └── icons.svg
@@ -75,6 +118,10 @@ No-LMS/
 │   │   │   ├── AdminLoginModal.tsx    # Secure admin authentication dialog
 │   │   │   ├── AdminStudio.tsx        # 3-Column Markdown Studio & Zen Mode
 │   │   │   └── ImageInsertModal.tsx   # Client-side WebP image processor
+│   │   ├── auth/                 # Authentication & RBAC components
+│   │   │   ├── AuthModal.tsx          # Multi-tab login dialog (Presets, SSO, JWT)
+│   │   │   ├── RoleBadge.tsx          # Role visualization chip
+│   │   │   └── RoleGuard.tsx          # Declarative permission boundary
 │   │   ├── catalog/              # Course discovery & catalog view
 │   │   │   └── CourseCatalog.tsx      # Filterable course grid with progress
 │   │   ├── common/               # Shared global components
@@ -95,13 +142,20 @@ No-LMS/
 │   ├── data/                     # Default seed courses and reference data
 │   │   ├── initialCheatSheets.ts      # Technical reference sheets
 │   │   └── initialCourses.ts          # Seed curriculum & module content
-│   ├── services/                 # Persistence & storage services
-│   │   └── storage.ts                 # LocalStorage persistence & backup/restore
+│   ├── services/                 # Persistence & authentication services
+│   │   ├── authService.ts             # JWT generator, RBAC engine & OAuth hooks
+│   │   ├── storage.ts                 # LocalStorage persistence & backup/restore
+│   │   └── __tests__/                 # Vitest service test suites
+│   ├── stores/                   # Global reactive state management
+│   │   ├── useAuthStore.ts            # Zustand auth state & permission hooks
+│   │   └── __tests__/                 # Zustand store test suites
 │   ├── types/                    # TypeScript interfaces & domain models
+│   │   ├── auth.ts                    # UserRole, AuthUser, UserPermissions
 │   │   └── index.ts                   # Course, Module, Topic, Quiz, Badge types
 │   ├── utils/                    # Helper utilities & design system logic
 │   │   ├── badges.ts                  # Badge tier evaluation & metadata
 │   │   ├── icons.tsx                  # Dynamic icon resolver
+│   │   ├── sanitize.ts                # Strict DOMPurify HTML/SVG/URL sanitizers
 │   │   └── theme.ts                   # Theme classes & gradient generators
 │   ├── App.tsx                   # Top-level router & state coordinator
 │   ├── index.css                 # Tailwind v4 theme tokens & glassmorphic styles
@@ -111,7 +165,8 @@ No-LMS/
 ├── LICENSE                       # MIT License
 ├── package.json                  # Dependencies & npm scripts
 ├── tailwind.config.js            # Tailwind theme, 8pt grid, and semantic colors
-└── vite.config.ts                # Vite build and plugin configuration
+├── tsconfig.json                 # Strict TypeScript configuration
+└── vite.config.ts                # Vite build, test & plugin configuration
 ```
 
 ---
@@ -191,10 +246,39 @@ All layout intervals, headers, and container gaps conform to exact 8pt multiples
    npm run preview
    ```
 
-7. **Code Linting**:
-   ```bash
-   npm run lint
-   ```
+---
+
+## 🧪 Testing & Quality Assurance
+
+Luminary LMS includes a comprehensive **Vitest** test suite covering authentication, RBAC permission resolution, Zustand store state, Markdown/SVG sanitization, Mermaid rendering, gamification badges, and client storage:
+
+```bash
+# Run all unit and component tests
+npm run test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with graphical UI
+npm run test:ui
+
+# Generate test coverage report
+npm run test:coverage
+```
+
+### Test Suite Summary
+
+- **84 / 84 Passing Tests** across 10 test suites:
+  - `authService.test.ts`: RBAC permission matrix, 3-part JWT session generation, credential & OAuth authentication.
+  - `useAuthStore.test.ts`: Zustand store actions, role switching, modal state, permission evaluation.
+  - `sanitize.test.ts`: XSS vector mitigation in HTML, SVG, and URL protocols.
+  - `MarkdownRenderer.test.tsx`: Custom callout parsing, KaTeX formula formatting, safe markup rendering.
+  - `MermaidViewer.test.tsx`: Diagram rendering, zoom/pan controls, error boundaries.
+  - `MindmapViewer.test.tsx`: SVG horizontal tree rendering, node clicks, responsive views.
+  - `AdminStudio.test.tsx`: 3-column editor layout, Zen Mode toggling, debounced live preview.
+  - `CourseReader.test.tsx`: Reading metrics, takeaway copy, notes export, inline quiz evaluation.
+  - `badges.test.ts`: Milestone calculation, tier unlocking (Bronze through Diamond), streak tracking.
+  - `storage.test.ts`: LocalStorage serialization, database export/import, session persistence.
 
 ---
 
@@ -213,6 +297,11 @@ VITE_STORAGE_PREFIX="luminary_lms_"
 # UI Defaults
 VITE_DEFAULT_THEME="system"
 
+# Authentication & Supabase Configuration
+VITE_ENABLE_OAUTH=true
+VITE_SUPABASE_URL="https://your-project.supabase.co"
+VITE_SUPABASE_ANON_KEY="your-anon-key"
+
 # Feature Flags
 VITE_ENABLE_EXPERIMENTAL_DIAGRAMS=true
 VITE_ENABLE_CERTIFICATE_EXPORT=true
@@ -223,7 +312,12 @@ VITE_ENABLE_GAMIFICATION=true
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) guide for details on code formatting, the 8pt design system, commit conventions, and our pull request process.
+Contributions are welcome! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) guide for details on:
+- 8pt Spatial Harmony & Semantic Color Guidelines
+- Strict TypeScript & Zero-`any` Standards
+- Security & DOMPurify Sanitization Protocols
+- Role-Based Access Control Guidelines
+- Vitest Testing & Pull Request Checklists
 
 ---
 
@@ -234,5 +328,5 @@ This project is open-source software licensed under the **[MIT License](LICENSE)
 ---
 
 <div align="center">
-  <sub>Built with ❤️ using React 19, Vite, Tailwind CSS, and Mermaid.js.</sub>
+  <sub>Built with ❤️ using React 19, TypeScript, Vite, Tailwind CSS, Zustand, and Mermaid.js.</sub>
 </div>
