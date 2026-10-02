@@ -1,4 +1,5 @@
-import { AuthSession, AuthUser, ROLE_PRESETS, UserPermissions, UserRole } from '../types/auth';
+import { AuthSession, AuthUser, ROLE_PRESETS, UserPermissions, UserRole, SignUpCredentials, SignInCredentials, SocialProvider } from '../types/auth';
+import { idpService } from './auth/idpService';
 
 const AUTH_STORAGE_KEY = 'luminary_auth_session_v1';
 
@@ -120,6 +121,7 @@ class AuthService {
   public clearSession(): void {
     try {
       localStorage.removeItem(AUTH_STORAGE_KEY);
+      idpService.signOut();
     } catch (e) {
       console.error('Failed to clear auth session:', e);
     }
@@ -156,11 +158,34 @@ class AuthService {
   }
 
   /**
+   * Real user sign-up via Identity Provider
+   */
+  public async signUp(credentials: SignUpCredentials): Promise<AuthSession> {
+    const session = await idpService.signUp(credentials);
+    this.saveSession(session);
+    return session;
+  }
+
+  /**
+   * Real user sign-in via Identity Provider
+   */
+  public async signIn(credentials: SignInCredentials): Promise<AuthSession> {
+    const session = await idpService.signIn(credentials);
+    this.saveSession(session);
+    return session;
+  }
+
+  /**
    * Standard Email & Password Authentication (Supports mock demo and enterprise SSO credentials).
    */
-  public async loginWithCredentials(email: string, _password: string, preferredRole?: UserRole): Promise<AuthSession> {
-    // Simulate brief network roundtrip
-    await new Promise((resolve) => setTimeout(resolve, 200));
+  public async loginWithCredentials(email: string, password?: string, preferredRole?: UserRole): Promise<AuthSession> {
+    if (password && password.length >= 6) {
+      try {
+        return await this.signIn({ email, password });
+      } catch {
+        // Fallback to demo credential resolution
+      }
+    }
 
     const cleanEmail = email.trim().toLowerCase();
     let role: UserRole = preferredRole || 'student';
@@ -194,14 +219,18 @@ class AuthService {
   /**
    * OAuth2 / Social / Supabase Sign-in Provider Integration
    */
-  public async loginWithOAuth(provider: 'oauth2' | 'supabase', targetRole: UserRole = 'student'): Promise<AuthSession> {
-    await new Promise((resolve) => setTimeout(resolve, 300));
+  public async loginWithOAuth(provider: SocialProvider | 'oauth2' | 'supabase', targetRole: UserRole = 'student'): Promise<AuthSession> {
+    if (provider === 'google' || provider === 'github' || provider === 'discord' || provider === 'apple') {
+      const session = await idpService.signInWithOAuth(provider, targetRole);
+      this.saveSession(session);
+      return session;
+    }
 
     const preset = ROLE_PRESETS[targetRole];
     const user: AuthUser = {
       ...preset.demoUser,
       id: `${provider}-usr-${Math.random().toString(36).substring(2, 8)}`,
-      provider,
+      provider: provider === 'supabase' ? 'supabase' : 'oauth2',
       lastLoginAt: new Date().toISOString()
     };
 

@@ -9,6 +9,16 @@ export type GradientTheme =
   | 'rose-pink'
   | 'slate-zinc';
 
+export type SyncStatus = 'synced' | 'pending' | 'conflict' | 'offline';
+
+export interface EditorInfo {
+  id: string;
+  name: string;
+  email?: string;
+  role?: string;
+  avatarUrl?: string;
+}
+
 export interface QuizQuestion {
   id: string;
   question: string;
@@ -30,6 +40,11 @@ export interface Topic {
   quiz?: QuizQuestion[];
   resources?: { title: string; url: string }[];
   updatedAt: string;
+  // Optimistic locking & sync attributes
+  version?: number;
+  revisionHash?: string;
+  lastEditedBy?: EditorInfo;
+  syncStatus?: SyncStatus;
 }
 
 export interface Module {
@@ -38,6 +53,10 @@ export interface Module {
   description?: string;
   order: number;
   topics: Topic[];
+  version?: number;
+  revisionHash?: string;
+  lastEditedBy?: EditorInfo;
+  syncStatus?: SyncStatus;
 }
 
 export interface Course {
@@ -57,6 +76,10 @@ export interface Course {
   createdAt: string;
   updatedAt: string;
   modules: Module[];
+  version?: number;
+  revisionHash?: string;
+  lastEditedBy?: EditorInfo;
+  syncStatus?: SyncStatus;
 }
 
 export interface UserProgress {

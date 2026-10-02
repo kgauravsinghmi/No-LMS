@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AuthUser, UserPermissions, UserRole } from '../types/auth';
+import { AuthUser, SignUpCredentials, SignInCredentials, SocialProvider, UserPermissions, UserRole } from '../types/auth';
 import { authService, ROLE_PERMISSIONS } from '../services/authService';
 
 interface AuthState {
@@ -8,16 +8,18 @@ interface AuthState {
   isAuthenticated: boolean;
   permissions: UserPermissions;
   isAuthModalOpen: boolean;
-  authModalDefaultTab: 'presets' | 'credentials' | 'sso';
+  authModalDefaultTab: 'presets' | 'credentials' | 'sso' | 'signup';
   requiredPermissionPrompt?: keyof UserPermissions | null;
 
   // Actions
   loginWithPreset: (role: UserRole) => void;
-  loginWithCredentials: (email: string, password: string, preferredRole?: UserRole) => Promise<void>;
-  loginWithOAuth: (provider: 'oauth2' | 'supabase', targetRole?: UserRole) => Promise<void>;
+  signUp: (credentials: SignUpCredentials) => Promise<void>;
+  signIn: (credentials: SignInCredentials) => Promise<void>;
+  loginWithCredentials: (email: string, password?: string, preferredRole?: UserRole) => Promise<void>;
+  loginWithOAuth: (provider: SocialProvider | 'oauth2' | 'supabase', targetRole?: UserRole) => Promise<void>;
   switchRole: (role: UserRole) => void;
   logout: () => void;
-  openAuthModal: (tab?: 'presets' | 'credentials' | 'sso', requiredPermission?: keyof UserPermissions | null) => void;
+  openAuthModal: (tab?: 'presets' | 'credentials' | 'sso' | 'signup', requiredPermission?: keyof UserPermissions | null) => void;
   closeAuthModal: () => void;
   hasPermission: (permission: keyof UserPermissions) => boolean;
 }
@@ -49,7 +51,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 
-  loginWithCredentials: async (email: string, password: string, preferredRole?: UserRole) => {
+  signUp: async (credentials: SignUpCredentials) => {
+    const session = await authService.signUp(credentials);
+    set({
+      user: session.user,
+      token: session.token,
+      isAuthenticated: true,
+      permissions: ROLE_PERMISSIONS[session.user.role],
+      isAuthModalOpen: false,
+      requiredPermissionPrompt: null
+    });
+  },
+
+  signIn: async (credentials: SignInCredentials) => {
+    const session = await authService.signIn(credentials);
+    set({
+      user: session.user,
+      token: session.token,
+      isAuthenticated: true,
+      permissions: ROLE_PERMISSIONS[session.user.role],
+      isAuthModalOpen: false,
+      requiredPermissionPrompt: null
+    });
+  },
+
+  loginWithCredentials: async (email: string, password?: string, preferredRole?: UserRole) => {
     const session = await authService.loginWithCredentials(email, password, preferredRole);
     set({
       user: session.user,
@@ -61,7 +87,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 
-  loginWithOAuth: async (provider: 'oauth2' | 'supabase', targetRole: UserRole = 'student') => {
+  loginWithOAuth: async (provider: SocialProvider | 'oauth2' | 'supabase', targetRole: UserRole = 'student') => {
     const session = await authService.loginWithOAuth(provider, targetRole);
     set({
       user: session.user,

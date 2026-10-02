@@ -1,6 +1,6 @@
 # Contributing to Luminary LMS
 
-Thank you for your interest in contributing to **Luminary LMS**! We welcome contributions from the community—whether it's fixing bugs, improving documentation, designing new themes, hardening security, or building new interactive features.
+Thank you for your interest in contributing to **Luminary LMS**! We welcome contributions from the community—whether it's fixing bugs, improving documentation, designing new themes, hardening security, building new interactive features, or expanding our enterprise cloud and database layer.
 
 ---
 
@@ -10,12 +10,13 @@ Thank you for your interest in contributing to **Luminary LMS**! We welcome cont
 2. [Getting Started](#getting-started)
 3. [Development Workflow](#development-workflow)
 4. [Design System & UI Guidelines](#design-system--ui-guidelines)
-5. [Security & Access Control Standards](#security--access-control-standards)
-6. [Testing & Quality Assurance](#testing--quality-assurance)
-7. [Code Quality & Architecture Standards](#code-quality--architecture-standards)
-8. [Commit Message Conventions](#commit-message-conventions)
-9. [Submitting a Pull Request](#submitting-a-pull-request)
-10. [Reporting Issues](#reporting-issues)
+5. [Concurrency, Conflict Handling & Repository Standards](#concurrency-conflict-handling--repository-standards)
+6. [Security & Access Control Standards](#security--access-control-standards)
+7. [Testing & Quality Assurance](#testing--quality-assurance)
+8. [Code Quality & Architecture Standards](#code-quality--architecture-standards)
+9. [Commit Message Conventions](#commit-message-conventions)
+10. [Submitting a Pull Request](#submitting-a-pull-request)
+11. [Reporting Issues](#reporting-issues)
 
 ---
 
@@ -57,7 +58,7 @@ We are committed to providing a welcoming, inclusive, and harassment-free enviro
    ```
    Open your browser at `http://localhost:5173`.
 
-5. **Run the Test Suite**:
+5. **Run the Full Test Suite**:
    ```bash
    npm run test
    ```
@@ -87,7 +88,7 @@ We are committed to providing a welcoming, inclusive, and harassment-free enviro
    - Run unit/component tests in watch mode: `npm run test:watch`.
 
 3. **Validate Code & Security Integrity**:
-   - Run the full test suite (`npm run test`).
+   - Run the full test suite (`npm run test`) to ensure all 108+ unit tests pass.
    - Ensure zero TypeScript compiler errors (`npm run build`).
    - Run the linter (`npm run lint`).
 
@@ -123,6 +124,26 @@ Avoid hardcoded `#000000` or `#ffffff` contrasts. Utilize semantic tokens config
 
 ---
 
+## Concurrency, Conflict Handling & Repository Standards
+
+### 1. Optimistic Locking & Revision Checksums
+- When modifying course entities (`Course`, `Module`, `Topic`), compute deterministic revision fingerprints using `conflictService.generateTopicRevisionHash()` or `conflictService.generateCourseRevisionHash()`.
+- Always increment `version` and update `lastEditedBy` with the authenticated user's profile on state persistence.
+- Before persisting an update to a shared draft, compare local revision hashes against server snapshots via `conflictService.detectTopicConflict()`. If collisions exist, open `ConflictModal` via `useConflictStore` to empower the author with 3-way resolution (`keep-local`, `keep-remote`, `manual-merge`).
+
+### 2. Repository Layer & Offline Queue
+- All data persistence should route through repository interfaces (`src/services/db/courseRepository.ts`, `src/services/db/progressRepository.ts`).
+- Ensure **0ms synchronous local cache hydration** so UI components render immediately without loading flickers.
+- Any mutations executed while offline must be captured in the persistent offline queue (`luminary_lms_offline_queue_v1`) and replayed automatically upon network reconnection.
+
+### 3. Media Upload & WebP Processing
+- Process all uploaded and pasted images through `mediaStorageService.ts`.
+- Compress raster assets to WebP (`0.85 quality`) using an off-screen HTML5 Canvas.
+- Bypass compression for vector SVG diagrams to preserve sharp resolution.
+- Ensure fallback to self-contained Base64 DataURLs if cloud endpoints are not configured.
+
+---
+
 ## Security & Access Control Standards
 
 ### 1. XSS Prevention & Sanitization
@@ -133,8 +154,9 @@ Avoid hardcoded `#000000` or `#ffffff` contrasts. Utilize semantic tokens config
   - `sanitizeUrl(url)`: For markdown links and image sources (blocks `javascript:`, `vbscript:`, and malicious `data:` protocols).
 - External hyperlinks must automatically receive `target="_blank"` and `rel="noopener noreferrer"`.
 
-### 2. Role-Based Access Control (RBAC)
+### 2. Identity Provider (IdP) & Role-Based Access Control (RBAC)
 - All course authoring, deletion, user management, and system administration views or buttons must be guarded using `<RoleGuard requiredPermission="..." />` or the `useAuthStore` permission helper (`hasPermission(...)`).
+- User authentication and password strength scoring are managed through `idpService.ts`.
 - Permissions are strictly defined in `src/types/auth.ts` and mapped in `ROLE_PERMISSIONS` in `src/services/authService.ts`.
 
 ---
@@ -144,16 +166,33 @@ Avoid hardcoded `#000000` or `#ffffff` contrasts. Utilize semantic tokens config
 We maintain high test coverage using **Vitest** and **React Testing Library**.
 
 ### Guidelines:
-- Place unit and integration tests adjacent to the code or in a `__tests__/` folder (e.g., `src/services/__tests__/authService.test.ts`).
+- Place unit and integration tests adjacent to the code or in a `__tests__/` folder (e.g., `src/services/db/__tests__/courseRepository.test.ts`).
 - When introducing a new feature, service method, or UI component, include corresponding test cases verifying:
   - Happy path execution
-  - Edge cases and error states
+  - Edge cases, offline fallbacks, and error states
   - Role-based permission enforcement (if applicable)
   - Security/sanitization verification (if parsing HTML, SVG, or URLs)
+  - Revision hash determinism and conflict detection logic
+
+### Test Suites (14 suites, 108 tests):
+- `src/services/db/__tests__/courseRepository.test.ts`
+- `src/services/auth/__tests__/idpService.test.ts`
+- `src/services/media/__tests__/mediaStorageService.test.ts`
+- `src/services/conflict/__tests__/conflictService.test.ts`
+- `src/services/__tests__/authService.test.ts`
+- `src/services/__tests__/storage.test.ts`
+- `src/stores/__tests__/useAuthStore.test.ts`
+- `src/utils/__tests__/sanitize.test.ts`
+- `src/utils/__tests__/badges.test.ts`
+- `src/components/content/__tests__/MarkdownRenderer.test.tsx`
+- `src/components/content/__tests__/MermaidViewer.test.tsx`
+- `src/components/content/__tests__/MindmapViewer.test.tsx`
+- `src/components/admin/__tests__/AdminStudio.test.tsx`
+- `src/components/reader/__tests__/CourseReader.test.tsx`
 
 ### Commands:
 ```bash
-# Run tests
+# Run all tests
 npm run test
 
 # Watch mode for active development
@@ -168,10 +207,9 @@ npm run test:coverage
 ## Code Quality & Architecture Standards
 
 - **TypeScript**: Strict type checking is enforced. Avoid using `any`; define explicit interfaces in `src/types/`.
-- **State Management**: Reactive global state lives in Zustand stores (`src/stores/`). Domain persistence routes through `src/services/storage.ts` or `src/services/authService.ts`.
+- **State Management**: Reactive global state lives in Zustand stores (`src/stores/`). Domain persistence routes through `src/services/storage.ts`, `src/services/db/`, or `src/services/authService.ts`.
 - **Component Modularity**: Keep components focused and single-purpose. Break complex views into reusable sub-components.
 - **Icons**: Use [Lucide React](https://lucide.dev/) icons exclusively for iconography.
-- **Image Handling**: All uploaded or pasted media should be processed client-side with `<canvas>` resizing and WebP compression.
 
 ---
 
@@ -200,11 +238,12 @@ We follow the [Conventional Commits](https://www.conventionalcommits.org/) speci
 
 ### Examples:
 ```bash
-feat(rbac): add role preset switcher and federated sso tab
+feat(conflict): add 3-way visual diff modal and optimistic locking
+feat(idp): implement live user registration and oauth2 federation
 security(sanitize): enforce strict svg filter profiling in dompurify
 perf(editor): debounce live markdown preview compilation by 350ms
-test(auth): add unit tests for jwt session generator and permission matrix
-docs(readme): update rbac matrix and vitest test suite documentation
+test(db): add offline queue synchronization test suite
+docs(readme): update production pillars and vitest test suite documentation
 ```
 
 ---
@@ -222,7 +261,7 @@ docs(readme): update rbac matrix and vitest test suite documentation
    - Attach screenshots or screen recordings for UI changes.
 
 3. **Review Checklist**:
-   - [ ] `npm run test` passes with 100% success.
+   - [ ] `npm run test` passes with 100% success (all 108+ tests passing).
    - [ ] `npm run build` succeeds with zero TypeScript or bundle errors.
    - [ ] `npm run lint` reports no violations.
    - [ ] Verified both Light Mode and Dark Mode rendering.

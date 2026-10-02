@@ -2,6 +2,37 @@ export type UserRole = 'admin' | 'instructor' | 'student' | 'guest';
 
 export type AuthProvider = 'local' | 'jwt' | 'oauth2' | 'supabase';
 
+export type SocialProvider = 'google' | 'github' | 'discord' | 'apple';
+
+export interface SignUpCredentials {
+  email: string;
+  password: string;
+  name: string;
+  role?: UserRole;
+  title?: string;
+  organization?: string;
+}
+
+export interface SignInCredentials {
+  email: string;
+  password: string;
+}
+
+export interface IdPConfig {
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
+  isOAuthEnabled: boolean;
+  providers: SocialProvider[];
+}
+
+export interface OAuthSession {
+  accessToken: string;
+  refreshToken?: string;
+  provider: SocialProvider | AuthProvider;
+  expiresIn?: number;
+  user: AuthUser;
+}
+
 export interface UserPermissions {
   canEditCourse: boolean;
   canPublishCourse: boolean;

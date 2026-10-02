@@ -10,14 +10,14 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4.3-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![Zustand](https://img.shields.io/badge/State-Zustand-orange?style=flat-square)](https://github.com/pmndrs/zustand)
 [![DOMPurify](https://img.shields.io/badge/Security-DOMPurify-blueviolet?style=flat-square)](https://github.com/cure53/DOMPurify)
-[![Vitest](https://img.shields.io/badge/Tests-84%20Passing-green?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Tests-108%20Passing-green?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 
 <p align="center">
-  A modern, ultra-responsive, zero-backend-required Learning Management Platform with enterprise-grade Role-Based Access Control (RBAC), distraction-free Markdown authoring, visual diagramming (Mermaid & Mindmaps), strict XSS sanitization, and gamified progress tracking.
+  An enterprise-grade, ultra-responsive Learning Management Platform featuring live database synchronization, production Identity Provider (IdP) with OAuth2, direct-to-cloud media storage, optimistic locking with 3-way visual conflict resolution, strict XSS sanitization, distraction-free Markdown authoring, visual diagramming (Mermaid & Mindmaps), and gamified progress tracking.
 </p>
 
-[Key Features](#-key-capabilities) • [Security & RBAC](#-security--access-control) • [Architecture](#-architecture--directory-layout) • [Getting Started](#-getting-started) • [Testing & QA](#-testing--quality-assurance) • [Design System](#-design-system--8pt-grid) • [Contributing](#-contributing)
+[Key Features](#-key-capabilities) • [Production Architecture](#-production-pillars--architecture) • [Security & RBAC](#-security--access-control) • [Directory Layout](#-architecture--directory-layout) • [Getting Started](#-getting-started) • [Testing & QA](#-testing--quality-assurance) • [Design System](#-design-system--8pt-grid) • [Contributing](#-contributing)
 
 ---
 
@@ -25,29 +25,50 @@
 
 ## ✨ Key Capabilities
 
-### 🛡️ 1. Enterprise RBAC & Multi-Provider Authentication
+### 🛡️ 1. Enterprise RBAC & Multi-Provider Identity (IdP)
+- **Production IdP & Auth Engine (`idpService.ts`)**: Live user registration, password strength metering (0–4 entropy evaluation with regex checks), RFC-compliant email validation, and 3-part Base64 URL JWT session generation.
+- **Social OAuth2 Federation**: Simulated & live OAuth2 providers for **GitHub**, **Google**, and **Discord** with domain-based role mapping.
 - **4 Distinct Personas**: Full permission boundaries for **Admin**, **Instructor**, **Student / Learner**, and **Guest Explorer**.
-- **Instant Role Preset Switching**: One-click persona switcher for local development, presentations, and testing.
-- **JWT & OAuth2 / Supabase Federation**: Mock 3-part JWT token generator (`header.payload.signature`) with automated expiration, domain-based role resolution, and federated SSO connectors.
-- **Declarative `<RoleGuard />` Barriers**: Protect administrative views and action buttons with contextual upgrade prompts.
-- **Reactive Zustand Store**: `useAuthStore` managing session tokens, user profiles, active permissions, and auth modals.
+- **Instant Role Preset Switching**: One-click persona switcher for rapid local development, client presentations, and automated QA.
+- **Declarative `<RoleGuard />` Barriers**: Protect administrative views and action triggers with contextual upgrade prompts.
+- **Reactive Zustand Store**: `useAuthStore` managing session tokens, user credentials, active permissions, and auth modals.
 
-### 🔒 2. Strict XSS Prevention & DOM Sanitization
+### 🔄 2. Multi-User Draft Conflict Handling & Optimistic Locking
+- **32-Bit FNV-1a Revision Checksums**: Deterministic content fingerprinting (`generateTopicRevisionHash`) computing checksums across topic title, summary, content, key takeaways, and quizzes.
+- **Optimistic Concurrency Control**: Automatic collision detection preventing concurrent author overwrites when multiple instructors edit content simultaneously.
+- **Line-by-Line Diff Engine**: Computes structured diff chunks (`unchanged`, `added`, `removed`, `modified`) across revisions.
+- **Visual 3-Way Conflict Modal (`ConflictModal.tsx`)**: Side-by-side comparison between server state and local unsaved drafts, featuring line-level diff highlighting, inline manual merge Markdown editor, and three resolution strategies (`keep-local`, `keep-remote`, `manual-merge`).
+
+### ☁️ 3. Cloud Media & Asset Storage Pipeline
+- **Direct-to-Cloud Upload Pipeline (`mediaStorageService.ts`)**: Upload course banners, diagrams, and assets directly to cloud buckets (`courses-media` via Supabase Storage, S3, or REST endpoints).
+- **Off-Screen HTML5 Canvas WebP Compression**: Automatic client-side image compression (0.85 quality) reducing payload size by up to 70% while preserving resolution.
+- **SVG Vector Preservation**: Dedicated vector bypass for SVG diagrams to maintain resolution independence without pixel distortion.
+- **Dedicated Cloud Upload UI (`ImageInsertModal.tsx`)**: File picker, upload progress indicator, CDN URL generation, and automatic Markdown tag insertion.
+- **Zero-Backend Offline Fallback**: Generates self-contained Base64 DataURLs if cloud endpoints are unreachable.
+
+### 🗄️ 4. Persistent Database & Offline-First Sync Layer
+- **Live Supabase & REST Client (`supabaseClient.ts`)**: Dynamic endpoint configuration, connection health checks, and REST request pipeline.
+- **Course & Progress Repositories (`courseRepository.ts`, `progressRepository.ts`)**:
+  - Instant **0ms synchronous local cache hydration** for responsive UI rendering.
+  - Background asynchronous revalidation and optimistic database upserts with `version` tracking.
+  - Durable offline mutation queue (`luminary_lms_offline_queue_v1`) that captures offline writes and automatically replays them upon network reconnection.
+- **Storage Coordinator (`storage.ts`)**: Hybrid persistence proxy bridging local storage and remote databases seamlessly.
+
+### 🔒 5. Strict XSS Prevention & DOM Sanitization
 - **DOMPurify HTML Sanitization**: Deep HTML filtering for custom Markdown, callouts, and raw HTML blocks with whitelisted tags and dangerous protocol rejection (`javascript:`, `vbscript:`, malicious `data:` URIs).
 - **SVG & Mermaid Sanitization**: Dedicated SVG profile (`USE_PROFILES: { svg: true, svgFilters: true }`) protecting dynamic diagram elements while preserving markers, curves, gradients, and filters.
 - **External Link Security**: Automatic injection of `target="_blank"` and `rel="noopener noreferrer"` for external hyperlinks.
 
-### 🛠️ 3. Course Studio & Distraction-Free Authoring
+### 🛠️ 6. Course Studio & Distraction-Free Authoring
 - **Three-Column Responsive Workspace**:
   - **Left (20%)**: Collapsible course outline and module/topic hierarchy with drag-and-drop navigation.
   - **Middle (40%)**: Raw Markdown editor in a crisp monospace font (`text-[14px] leading-[1.6] font-mono`) with quick-insert toolbar.
   - **Right (40%)**: Live preview pane with responsive viewport simulation (Desktop, Tablet, Mobile).
 - **Zen Mode (`Cmd/Ctrl + Shift + F`)**: Instantly collapses sidebars into an **800px max-width** centered canvas for focused writing.
 - **350ms Debounced Preview**: Typing state is decoupled from live compilation to maintain smooth 60fps responsiveness during heavy Mermaid or KaTeX parses.
-- **Client-Side Media Compression**: Drag-and-drop or paste images from the clipboard—automatically converted via `<canvas>` to optimized WebP format with automated figure captions.
 - **Interactive Quiz Builder**: Build multiple-choice assessments with real-time feedback and explanation fields.
 
-### 📖 4. Interactive Learning & Reader Canvas
+### 📖 7. Interactive Learning & Reader Canvas
 - **Typography & Ergonomics**: Engineered with `Outfit` headers, `Plus Jakarta Sans` body, and `JetBrains Mono` code blocks for optimal legibility.
 - **Reading Metrics**: Real-time reading time calculation and word counts.
 - **Quick Action Utilities**:
@@ -55,19 +76,42 @@
   - **Export Notes**: Export formatted Markdown notes (`.md`) directly for Obsidian, Notion, and Logseq.
 - **Embedded Quiz Testing Engine**: Interactive inline testing with instant feedback, explanations, and XP rewards.
 
-### 📊 5. Visual Diagramming & Mathematical Formulas
+### 📊 8. Visual Diagramming & Mathematical Formulas
 - **Mermaid.js 12 Visualizations**: Native rendering for Flowcharts, Sequence diagrams, Mindmaps (with horizontal SVG curve trees), ER diagrams, Git graphs, Architecture C4 diagrams, Quadrant charts, and Kanban boards.
 - **Interactive Diagram Modal**: Fullscreen zoom, pan, and SVG export capabilities for high-density architectural charts.
 - **Mathematical Typography**: Seamless KaTeX LaTeX math support for inline formulas (`$E = mc^2$`) and display equation blocks (`$$\sum_{i=1}^{n} x_i$$`).
 
-### 🏆 6. Gamification & Progression System
+### 🏆 9. Gamification & Progression System
 - **Tiered Medal & Badges**: Unlock Bronze, Silver, Gold, Platinum, and Diamond achievements across learning milestones (Topics Mastered, Perfect Quizzes, Course Completions, Reading Streaks).
 - **Celebration Confetti**: Physics-based confetti celebration effects on course and quiz completions powered by `canvas-confetti`.
 - **Verified Completion Certificates**: Generate printable and downloadable certificates upon completing all course modules.
 
-### ⚡ 7. Reference & Cheat Sheet Hub
+### ⚡ 10. Reference & Cheat Sheet Hub
 - Comprehensive quick-reference sheets covering Data Structures, Algorithms, System Design, Git, SQL, Docker, Python, and TypeScript.
 - Live search filtering and one-click code copy.
+
+---
+
+## 🏛️ Production Pillars & Architecture
+
+```
+                                  ┌───────────────────────────┐
+                                  │      Luminary LMS UI      │
+                                  │  (React 19 + Tailwind v4) │
+                                  └─────────────┬─────────────┘
+                                                │
+                 ┌──────────────────────────────┼──────────────────────────────┐
+                 ▼                              ▼                              ▼
+    ┌────────────────────────┐    ┌────────────────────────┐    ┌────────────────────────┐
+    │    Identity Provider   │    │  Course Studio Engine  │    │ Persistent Repository  │
+    │      (idpService)      │    │  (Conflict & Locking)  │    │  (course / progress)   │
+    ├────────────────────────┤    ├────────────────────────┤    ├────────────────────────┤
+    │ • Password Validation  │    │ • FNV-1a Checksums     │    │ • 0ms Cache Hydration  │
+    │ • RFC Email Formatter  │    │ • 3-Way Diff Engine    │    │ • Background Sync      │
+    │ • Base64 JWT Generator │    │ • Conflict Resolution  │    │ • Offline Queue Replay │
+    │ • OAuth2 Federation    │    │ • Canvas WebP Media    │    │ • Supabase / REST DB   │
+    └────────────────────────┘    └────────────────────────┘    └────────────────────────┘
+```
 
 ---
 
@@ -107,8 +151,7 @@ import { RoleGuard } from './components/auth/RoleGuard';
 
 ```
 No-LMS/
-├── images/                       # Sample illustrations & screenshots
-├── public/                       # Static public assets & icons
+├── public/                       # Static public assets & vector icons
 │   ├── favicon.svg
 │   └── icons.svg
 ├── src/
@@ -117,9 +160,10 @@ No-LMS/
 │   │   ├── admin/                # Course authoring & studio components
 │   │   │   ├── AdminLoginModal.tsx    # Secure admin authentication dialog
 │   │   │   ├── AdminStudio.tsx        # 3-Column Markdown Studio & Zen Mode
-│   │   │   └── ImageInsertModal.tsx   # Client-side WebP image processor
+│   │   │   ├── ConflictModal.tsx      # Visual 3-Way diff & merge conflict resolution
+│   │   │   └── ImageInsertModal.tsx   # Cloud media upload & WebP compressor
 │   │   ├── auth/                 # Authentication & RBAC components
-│   │   │   ├── AuthModal.tsx          # Multi-tab login dialog (Presets, SSO, JWT)
+│   │   │   ├── AuthModal.tsx          # Production IdP, OAuth2 & preset login modal
 │   │   │   ├── RoleBadge.tsx          # Role visualization chip
 │   │   │   └── RoleGuard.tsx          # Declarative permission boundary
 │   │   ├── catalog/              # Course discovery & catalog view
@@ -142,15 +186,31 @@ No-LMS/
 │   ├── data/                     # Default seed courses and reference data
 │   │   ├── initialCheatSheets.ts      # Technical reference sheets
 │   │   └── initialCourses.ts          # Seed curriculum & module content
-│   ├── services/                 # Persistence & authentication services
+│   ├── services/                 # Persistence, IdP & conflict services
+│   │   ├── auth/
+│   │   │   ├── idpService.ts          # Production IdP, password meter & OAuth2
+│   │   │   └── __tests__/             # IdP unit test suite
+│   │   ├── conflict/
+│   │   │   ├── conflictService.ts     # FNV-1a checksums, diff chunks & 3-way merge
+│   │   │   └── __tests__/             # Conflict service test suite
+│   │   ├── db/
+│   │   │   ├── courseRepository.ts    # Course CRUD with offline mutation queue
+│   │   │   ├── progressRepository.ts  # Learner progress & quiz state sync
+│   │   │   ├── supabaseClient.ts      # Supabase REST client & health checks
+│   │   │   └── __tests__/             # Repository test suite
+│   │   ├── media/
+│   │   │   ├── mediaStorageService.ts # Direct cloud uploads & WebP compression
+│   │   │   └── __tests__/             # Media service test suite
 │   │   ├── authService.ts             # JWT generator, RBAC engine & OAuth hooks
-│   │   ├── storage.ts                 # LocalStorage persistence & backup/restore
-│   │   └── __tests__/                 # Vitest service test suites
+│   │   ├── storage.ts                 # Hybrid persistence coordinator
+│   │   └── __tests__/                 # Storage test suites
 │   ├── stores/                   # Global reactive state management
 │   │   ├── useAuthStore.ts            # Zustand auth state & permission hooks
+│   │   ├── useConflictStore.ts        # Collision tracking & 3-way merge store
 │   │   └── __tests__/                 # Zustand store test suites
 │   ├── types/                    # TypeScript interfaces & domain models
-│   │   ├── auth.ts                    # UserRole, AuthUser, UserPermissions
+│   │   ├── auth.ts                    # UserRole, AuthUser, UserPermissions, IdP types
+│   │   ├── conflict.ts                # ConflictDetectionResult, DiffChunk, MergeStrategy
 │   │   └── index.ts                   # Course, Module, Topic, Quiz, Badge types
 │   ├── utils/                    # Helper utilities & design system logic
 │   │   ├── badges.ts                  # Badge tier evaluation & metadata
@@ -199,7 +259,7 @@ All layout intervals, headers, and container gaps conform to exact 8pt multiples
 | :--- | :--- | :--- |
 | **`Cmd/Ctrl + Shift + F`** | Course Studio | Toggle **Zen Mode** (Distraction-free 800px canvas) |
 | **`Escape`** | Global / Studio | Exit Zen Mode / Close open dialogs & lightboxes |
-| **`Cmd/Ctrl + S`** | Course Studio | Save active topic changes to LocalStorage |
+| **`Cmd/Ctrl + S`** | Course Studio | Save active topic changes with optimistic locking |
 | **`Cmd/Ctrl + K`** | Global | Open global command palette & curriculum search |
 
 ---
@@ -250,7 +310,7 @@ All layout intervals, headers, and container gaps conform to exact 8pt multiples
 
 ## 🧪 Testing & Quality Assurance
 
-Luminary LMS includes a comprehensive **Vitest** test suite covering authentication, RBAC permission resolution, Zustand store state, Markdown/SVG sanitization, Mermaid rendering, gamification badges, and client storage:
+Luminary LMS includes a comprehensive **Vitest** test suite covering database repositories, identity providers, cloud media, optimistic locking diffs, RBAC matrix, Zustand stores, DOM sanitization, Mermaid diagrams, and client storage:
 
 ```bash
 # Run all unit and component tests
@@ -268,7 +328,11 @@ npm run test:coverage
 
 ### Test Suite Summary
 
-- **84 / 84 Passing Tests** across 10 test suites:
+- **108 / 108 Passing Tests** across **14 test suites**:
+  - `courseRepository.test.ts`: Local cache, optimistic concurrency, and offline queue synchronization.
+  - `idpService.test.ts`: Password strength scoring, RFC email validation, JWT session generation, and OAuth simulation.
+  - `mediaStorageService.test.ts`: WebP compression upload to cloud storage and fallback Base64 URL generation.
+  - `conflictService.test.ts`: Revision hash generation, collision detection on simultaneous edits, and line-by-line diff chunking.
   - `authService.test.ts`: RBAC permission matrix, 3-part JWT session generation, credential & OAuth authentication.
   - `useAuthStore.test.ts`: Zustand store actions, role switching, modal state, permission evaluation.
   - `sanitize.test.ts`: XSS vector mitigation in HTML, SVG, and URL protocols.
@@ -302,6 +366,9 @@ VITE_ENABLE_OAUTH=true
 VITE_SUPABASE_URL="https://your-project.supabase.co"
 VITE_SUPABASE_ANON_KEY="your-anon-key"
 
+# Cloud Storage Bucket Configuration
+VITE_MEDIA_STORAGE_BUCKET="courses-media"
+
 # Feature Flags
 VITE_ENABLE_EXPERIMENTAL_DIAGRAMS=true
 VITE_ENABLE_CERTIFICATE_EXPORT=true
@@ -314,6 +381,7 @@ VITE_ENABLE_GAMIFICATION=true
 
 Contributions are welcome! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) guide for details on:
 - 8pt Spatial Harmony & Semantic Color Guidelines
+- Optimistic Concurrency, Revision Hashing & Conflict Resolution
 - Strict TypeScript & Zero-`any` Standards
 - Security & DOMPurify Sanitization Protocols
 - Role-Based Access Control Guidelines

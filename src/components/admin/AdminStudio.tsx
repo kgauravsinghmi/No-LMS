@@ -58,8 +58,11 @@ import { AVAILABLE_ICONS, getCourseIcon } from '../../utils/icons';
 import { storageService } from '../../services/storage';
 import { MarkdownRenderer } from '../content/MarkdownRenderer';
 import { ImageInsertModal } from './ImageInsertModal';
+import { ConflictModal } from './ConflictModal';
 import { useUIStore } from '../../stores/useUIStore';
 import { useDraftAutoSave } from '../../hooks/useDraftAutoSave';
+import { conflictService } from '../../services/conflict/conflictService';
+import { useConflictStore } from '../../stores/useConflictStore';
 
 interface AdminStudioProps {
   adminUser: AdminUser;
@@ -506,10 +509,10 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
   };
 
   // --------------------------------------------------------------------------
-  // SAVE & DATA MODIFICATION HANDLERS
+  // SAVE & DATA MODIFICATION HANDLERS (With Optimistic Concurrency & Locking)
   // --------------------------------------------------------------------------
-  const handleSaveTopic = () => {
-    if (!activeCourse || !activeModule || !activeTopic) return;
+  const persistTopicData = (topicToSave: Topic) => {
+    if (!activeCourse || !activeModule) return;
 
     setSaveStatus('saving');
 
@@ -525,19 +528,8 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
           return {
             ...mod,
             topics: mod.topics.map((top) => {
-              if (top.id !== activeTopic.id) return top;
-
-              return {
-                ...top,
-                title: topicForm.title,
-                slug: topicForm.slug || topicForm.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-                summary: topicForm.summary,
-                readingTimeMinutes: Number(topicForm.readingTimeMinutes) || 5,
-                keyTakeaways: topicForm.keyTakeaways,
-                quiz: topicForm.quiz,
-                content: topicForm.content,
-                updatedAt: new Date().toISOString()
-              };
+              if (top.id !== topicToSave.id) return top;
+              return topicToSave;
             })
           };
         })
@@ -553,6 +545,68 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
     setTimeout(() => {
       setSaveStatus('idle');
     }, 2500);
+  };
+
+  const handleSaveTopic = () => {
+    if (!activeCourse || !activeModule || !activeTopic) return;
+
+    const topicCandidate: Topic = {
+      ...activeTopic,
+      title: topicForm.title,
+      slug: topicForm.slug || topicForm.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      summary: topicForm.summary,
+      readingTimeMinutes: Number(topicForm.readingTimeMinutes) || 5,
+      keyTakeaways: topicForm.keyTakeaways,
+      quiz: topicForm.quiz,
+      content: topicForm.content,
+      version: (activeTopic.version || 1) + 1,
+      lastEditedBy: {
+        id: adminUser.username || 'admin',
+        name: adminUser.username || 'Administrator',
+        role: adminUser.role
+      },
+      updatedAt: new Date().toISOString()
+    };
+    topicCandidate.revisionHash = conflictService.generateTopicRevisionHash(topicCandidate);
+
+    // Retrieve fresh snapshot from storage to check for concurrent modifications
+    const freshCourses = storageService.getCourses();
+    const freshCourse = freshCourses.find((c) => c.id === activeCourse.id);
+    const freshModule = freshCourse?.modules.find((m) => m.id === activeModule.id);
+    const serverTopic = freshModule?.topics.find((t) => t.id === activeTopic.id);
+
+    // Check if server version was modified by another editor
+    if (
+      serverTopic &&
+      serverTopic.revisionHash &&
+      activeTopic.revisionHash &&
+      serverTopic.revisionHash !== activeTopic.revisionHash
+    ) {
+      const conflictResult = conflictService.detectTopicConflict(topicCandidate, serverTopic, adminUser.username);
+      if (conflictResult.hasConflict) {
+        useConflictStore.getState().openConflictModal(
+          activeCourse.id,
+          activeModule.id,
+          activeTopic.id,
+          conflictResult,
+          (resolvedTopic) => {
+            persistTopicData(resolvedTopic);
+            setTopicForm((prev) => ({
+              ...prev,
+              title: resolvedTopic.title,
+              summary: resolvedTopic.summary || '',
+              content: resolvedTopic.content,
+              keyTakeaways: resolvedTopic.keyTakeaways || [],
+              quiz: resolvedTopic.quiz || []
+            }));
+            setDebouncedContent(resolvedTopic.content);
+          }
+        );
+        return;
+      }
+    }
+
+    persistTopicData(topicCandidate);
   };
 
   // Module & Topic Creation / Deletion
@@ -1933,6 +1987,11 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
           insertMarkdownText(markdown, '', '');
         }}
       />
+
+      {/* -------------------------------------------------------------------- */}
+      {/* MODAL: MULTI-USER SIMULTANEOUS EDIT CONFLICT RESOLUTION MODAL       */}
+      {/* -------------------------------------------------------------------- */}
+      <ConflictModal />
 
       {/* -------------------------------------------------------------------- */}
       {/* MODAL: CREATE NEW COURSE                                            */}

@@ -1,5 +1,8 @@
 import { Course, Module, Topic, UserProgress, AdminUser } from '../types';
 import { INITIAL_COURSES } from '../data/initialCourses';
+import { courseRepository } from './db/courseRepository';
+import { progressRepository } from './db/progressRepository';
+import { dbClient } from './db/supabaseClient';
 
 const STORAGE_KEYS = {
   COURSES: 'luminary_lms_courses_v1',
@@ -14,37 +17,26 @@ const DEFAULT_ADMIN_PIN = 'admin123';
 export const storageService = {
   // --- COURSES ---
   getCourses(): Course[] {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.COURSES);
-      if (!raw) {
-        this.saveCourses(INITIAL_COURSES);
-        return INITIAL_COURSES;
-      }
-      return JSON.parse(raw);
-    } catch (e) {
-      console.warn('Failed to parse courses from storage, using initial fallback', e);
-      return INITIAL_COURSES;
-    }
+    return courseRepository.getCoursesSync();
+  },
+
+  async fetchCoursesAsync(options?: { forceRemote?: boolean }): Promise<Course[]> {
+    return courseRepository.getCourses(options);
   },
 
   saveCourses(courses: Course[]): void {
-    try {
-      localStorage.setItem(STORAGE_KEYS.COURSES, JSON.stringify(courses));
-      window.dispatchEvent(new Event('luminary_courses_updated'));
-    } catch (e) {
-      console.error('Failed to save courses to localStorage', e);
-    }
+    courseRepository.setLocalCourses(courses);
   },
 
   getCourseById(courseId: string): Course | undefined {
-    const courses = this.getCourses();
-    return courses.find(c => c.id === courseId || c.slug === courseId);
+    return courseRepository.getCourseById(courseId);
   },
 
   addCourse(newCourse: Course): Course {
     const courses = this.getCourses();
     const updated = [newCourse, ...courses];
     this.saveCourses(updated);
+    courseRepository.saveCourse(newCourse).catch(err => console.warn('Background save course error:', err));
     return newCourse;
   },
 
@@ -71,6 +63,8 @@ export const storageService = {
       tags: courseData.tags || ['Engineering'],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      version: 1,
+      syncStatus: dbClient.isLiveDatabaseEnabled() ? 'pending' : 'synced',
       modules: courseData.modules || [
         {
           id: `mod-${Date.now()}`,
@@ -87,7 +81,8 @@ export const storageService = {
               isPublished: true,
               summary: 'Overview of the curriculum',
               content: '## Getting Started\n\nWelcome to this course! Write your content here in your own words.',
-              updatedAt: new Date().toISOString()
+              updatedAt: new Date().toISOString(),
+              version: 1
             }
           ]
         }
@@ -105,15 +100,23 @@ export const storageService = {
         courses[index] = {
           ...courses[index],
           ...maybeData,
+          version: (courses[index].version || 1) + 1,
           updatedAt: new Date().toISOString()
         };
         this.saveCourses(courses);
+        courseRepository.saveCourse(courses[index]).catch(err => console.warn('Background update course error:', err));
       }
     } else {
       const index = courses.findIndex(c => c.id === courseOrId.id);
       if (index !== -1) {
-        courses[index] = { ...courseOrId, updatedAt: new Date().toISOString() };
+        const updated = {
+          ...courseOrId,
+          version: (courseOrId.version || 1) + 1,
+          updatedAt: new Date().toISOString()
+        };
+        courses[index] = updated;
         this.saveCourses(courses);
+        courseRepository.saveCourse(updated).catch(err => console.warn('Background update course error:', err));
       }
     }
   },
@@ -122,6 +125,7 @@ export const storageService = {
     const courses = this.getCourses();
     const filtered = courses.filter(c => c.id !== courseId);
     this.saveCourses(filtered);
+    courseRepository.deleteCourse(courseId).catch(err => console.warn('Background delete course error:', err));
   },
 
   // --- MODULE HELPERS ---
@@ -186,6 +190,7 @@ export const storageService = {
       keyTakeaways: topicData.keyTakeaways || [],
       content: topicData.content || '## New Lesson\n\nExplain your ideas in your own words here.\n',
       quiz: topicData.quiz,
+      version: 1,
       updatedAt: new Date().toISOString()
     };
 
@@ -220,6 +225,7 @@ export const storageService = {
         module.topics[tIndex] = {
           ...module.topics[tIndex],
           ...maybeData,
+          version: (module.topics[tIndex].version || 1) + 1,
           updatedAt: new Date().toISOString()
         };
         this.updateCourse(course);
@@ -227,7 +233,11 @@ export const storageService = {
     } else {
       const tIndex = module.topics.findIndex(t => t.id === topicIdOrTopic.id);
       if (tIndex !== -1) {
-        module.topics[tIndex] = { ...topicIdOrTopic, updatedAt: new Date().toISOString() };
+        module.topics[tIndex] = {
+          ...topicIdOrTopic,
+          version: (topicIdOrTopic.version || 1) + 1,
+          updatedAt: new Date().toISOString()
+        };
         this.updateCourse(course);
       }
     }
@@ -247,76 +257,27 @@ export const storageService = {
 
   // --- PROGRESS & NOTES ---
   getProgress(): UserProgress {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.PROGRESS);
-      if (!raw) {
-        const defaultProg: UserProgress = {
-          completedTopicIds: ['top-fs-101'],
-          bookmarkedTopicIds: [],
-          topicNotes: {},
-          quizResults: {}
-        };
-        this.saveProgress(defaultProg);
-        return defaultProg;
-      }
-      return JSON.parse(raw);
-    } catch {
-      return {
-        completedTopicIds: [],
-        bookmarkedTopicIds: [],
-        topicNotes: {},
-        quizResults: {}
-      };
-    }
+    return progressRepository.getProgress();
   },
 
   saveProgress(progress: UserProgress): void {
-    try {
-      localStorage.setItem(STORAGE_KEYS.PROGRESS, JSON.stringify(progress));
-      window.dispatchEvent(new Event('luminary_progress_updated'));
-    } catch (e) {
-      console.error('Failed to save progress to localStorage', e);
-    }
+    progressRepository.saveProgress(progress);
   },
 
   toggleTopicCompleted(topicId: string): boolean {
-    const prog = this.getProgress();
-    const isCompleted = prog.completedTopicIds.includes(topicId);
-    if (isCompleted) {
-      prog.completedTopicIds = prog.completedTopicIds.filter(id => id !== topicId);
-    } else {
-      prog.completedTopicIds.push(topicId);
-    }
-    this.saveProgress(prog);
-    return !isCompleted;
+    return progressRepository.toggleTopicCompleted(topicId);
   },
 
   toggleBookmark(topicId: string): boolean {
-    const prog = this.getProgress();
-    const isBookmarked = prog.bookmarkedTopicIds.includes(topicId);
-    if (isBookmarked) {
-      prog.bookmarkedTopicIds = prog.bookmarkedTopicIds.filter(id => id !== topicId);
-    } else {
-      prog.bookmarkedTopicIds.push(topicId);
-    }
-    this.saveProgress(prog);
-    return !isBookmarked;
+    return progressRepository.toggleBookmark(topicId);
   },
 
   saveNote(topicId: string, noteText: string): void {
-    const prog = this.getProgress();
-    prog.topicNotes[topicId] = noteText;
-    this.saveProgress(prog);
+    progressRepository.saveNote(topicId, noteText);
   },
 
   saveQuizResult(topicId: string, score: number, total: number): void {
-    const prog = this.getProgress();
-    prog.quizResults[topicId] = {
-      score,
-      total,
-      timestamp: new Date().toISOString()
-    };
-    this.saveProgress(prog);
+    progressRepository.saveQuizResult(topicId, score, total);
   },
 
   // --- ADMIN AUTH & SESSIONS ---
