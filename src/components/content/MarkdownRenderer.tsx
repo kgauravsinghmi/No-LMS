@@ -11,7 +11,8 @@ import {
   Sparkles,
   CheckCircle2,
   XCircle,
-  RotateCcw
+  RotateCcw,
+  X
 } from 'lucide-react';
 import { QuizQuestion } from '../../types';
 import { MindmapViewer } from './MindmapViewer';
@@ -26,6 +27,293 @@ interface MarkdownRendererProps {
   topicId?: string;
   onQuizSubmit?: (score: number, total: number) => void;
   savedQuizScore?: { score: number; total: number };
+}
+
+export type ListItemKind =
+  | 'task'         // [ ] or [x]
+  | 'check'        // ✓, ✔, ✅, [v]
+  | 'cross'        // ✗, ✘, ❌
+  | 'roman-lower'  // i., ii., iii., iv.
+  | 'roman-upper'  // I., II., III., IV.
+  | 'alpha-lower'  // a., b., c.
+  | 'alpha-upper'  // A., B., C.
+  | 'decimal'      // 1., 2., 3.
+  | 'bullet';      // -, *, +, •
+
+export interface ParsedListItem {
+  raw: string;
+  text: string;
+  kind: ListItemKind;
+  indent: number;
+  marker: string;
+  checked?: boolean;
+  id?: string;
+}
+
+// Classify line into list item type
+function classifyListItem(line: string, lineIndex: number): ParsedListItem | null {
+  const indentMatch = line.match(/^(\s*)/);
+  const indentSpaces = indentMatch ? indentMatch[1].length : 0;
+  const indentLevel = Math.min(Math.floor(indentSpaces / 2), 4);
+  const trimmed = line.trim();
+
+  // 1. Task Checklists: - [ ] text, * [x] text, + [X] text, - [v] text
+  const taskMatch = trimmed.match(/^[-*+]\s+\[([ xXvV!])\]\s+(.+)$/);
+  if (taskMatch) {
+    const flag = taskMatch[1].toLowerCase();
+    const text = taskMatch[2];
+    const id = `task-${lineIndex}-${text.slice(0, 15).replace(/\s+/g, '-')}`;
+    return {
+      raw: line,
+      text,
+      kind: 'task',
+      indent: indentLevel,
+      marker: `[${taskMatch[1]}]`,
+      checked: flag === 'x' || flag === 'v',
+      id
+    };
+  }
+
+  // 2. Standalone Check sign bullets: ✓ item, ✔ item, ✅ item, [v] item
+  const checkBulletMatch = trimmed.match(/^([-*+]\s+)?([✓✔✅]|\[v\])\s+(.+)$/i);
+  if (checkBulletMatch) {
+    return {
+      raw: line,
+      text: checkBulletMatch[3],
+      kind: 'check',
+      indent: indentLevel,
+      marker: checkBulletMatch[2]
+    };
+  }
+
+  // 3. Standalone Cross / Negative bullets: ✗ item, ✘ item, ❌ item
+  const crossBulletMatch = trimmed.match(/^([-*+]\s+)?([✗✘❌])\s+(.+)$/i);
+  if (crossBulletMatch) {
+    return {
+      raw: line,
+      text: crossBulletMatch[3],
+      kind: 'cross',
+      indent: indentLevel,
+      marker: crossBulletMatch[2]
+    };
+  }
+
+  // 4. Roman Numeral lists (lowercase): i., ii., iii., iv., v., vi., vii., viii., ix., x., xi., xii. etc. or i), ii)
+  const romanLowerMatch = trimmed.match(/^(i|ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii|xiii|xiv|xv|xvi|xvii|xviii|xix|xx)([.)])\s+(.+)$/i);
+  if (romanLowerMatch && romanLowerMatch[1] === romanLowerMatch[1].toLowerCase()) {
+    return {
+      raw: line,
+      text: romanLowerMatch[3],
+      kind: 'roman-lower',
+      indent: indentLevel,
+      marker: `${romanLowerMatch[1]}${romanLowerMatch[2]}`
+    };
+  }
+
+  // 5. Roman Numeral lists (uppercase): I., II., III., IV., V., VI., VII., VIII., IX., X. etc.
+  if (romanLowerMatch && romanLowerMatch[1] === romanLowerMatch[1].toUpperCase()) {
+    return {
+      raw: line,
+      text: romanLowerMatch[3],
+      kind: 'roman-upper',
+      indent: indentLevel,
+      marker: `${romanLowerMatch[1]}${romanLowerMatch[2]}`
+    };
+  }
+
+  // 6. Alphabet lists (lowercase): a., b., c., d., e., a), b)
+  const alphaLowerMatch = trimmed.match(/^([a-z])([.)])\s+(.+)$/);
+  if (alphaLowerMatch) {
+    return {
+      raw: line,
+      text: alphaLowerMatch[3],
+      kind: 'alpha-lower',
+      indent: indentLevel,
+      marker: `${alphaLowerMatch[1]}${alphaLowerMatch[2]}`
+    };
+  }
+
+  // 7. Alphabet lists (uppercase): A., B., C., D., E., A), B)
+  const alphaUpperMatch = trimmed.match(/^([A-Z])([.)])\s+(.+)$/);
+  if (alphaUpperMatch) {
+    return {
+      raw: line,
+      text: alphaUpperMatch[3],
+      kind: 'alpha-upper',
+      indent: indentLevel,
+      marker: `${alphaUpperMatch[1]}${alphaUpperMatch[2]}`
+    };
+  }
+
+  // 8. Numbered / Decimal lists: 1., 2., 3., 10., 1), 2)
+  const decMatch = trimmed.match(/^(\d+)([.)])\s+(.+)$/);
+  if (decMatch) {
+    return {
+      raw: line,
+      text: decMatch[3],
+      kind: 'decimal',
+      indent: indentLevel,
+      marker: `${decMatch[1]}${decMatch[2]}`
+    };
+  }
+
+  // 9. Standard unordered bullets: -, *, +, •
+  const bulletMatch = trimmed.match(/^[-*+•]\s+(.+)$/);
+  if (bulletMatch) {
+    return {
+      raw: line,
+      text: bulletMatch[1],
+      kind: 'bullet',
+      indent: indentLevel,
+      marker: '•'
+    };
+  }
+
+  return null;
+}
+
+// Render individual list item node
+function renderListItemNode(
+  item: ParsedListItem,
+  index: number,
+  typography: any,
+  checkedState: boolean | undefined,
+  onToggleCheck?: (id: string, defaultChecked: boolean) => void
+) {
+  const isChecked = checkedState !== undefined ? checkedState : !!item.checked;
+  const indentClass =
+    item.indent === 1 ? 'ml-5 sm:ml-6' :
+    item.indent === 2 ? 'ml-9 sm:ml-12' :
+    item.indent === 3 ? 'ml-13 sm:ml-16' :
+    item.indent >= 4 ? 'ml-17 sm:ml-20' : '';
+
+  // Interactive Task Item
+  if (item.kind === 'task') {
+    return (
+      <div
+        key={`list-task-${index}-${item.id}`}
+        onClick={() => onToggleCheck && item.id && onToggleCheck(item.id, !!item.checked)}
+        className={`flex items-start gap-3 my-1.5 cursor-pointer group py-1 px-2 -mx-2 rounded-xl hover:bg-slate-100/60 dark:hover:bg-slate-800/40 transition-colors ${indentClass}`}
+      >
+        <div
+          className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 ${
+            isChecked
+              ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
+              : 'border-slate-300 dark:border-slate-700 group-hover:border-indigo-400 bg-white dark:bg-slate-900'
+          }`}
+        >
+          {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+        </div>
+        <span
+          className={`${typography.checkItem || typography.list} transition-colors ${
+            isChecked
+              ? 'line-through text-slate-400 dark:text-slate-500'
+              : 'text-slate-700 dark:text-slate-300'
+          }`}
+        >
+          {renderInlineFormatting(item.text)}
+        </span>
+      </div>
+    );
+  }
+
+  // Checkmark Bullet (✓, ✔, ✅, [v])
+  if (item.kind === 'check') {
+    return (
+      <div
+        key={`list-check-${index}`}
+        className={`flex items-start gap-3 my-1.5 py-0.5 ${indentClass}`}
+      >
+        <span className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5 border border-emerald-300/60 dark:border-emerald-800/60 shadow-xs">
+          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+        </span>
+        <span className={`text-slate-700 dark:text-slate-300 ${typography.list}`}>
+          {renderInlineFormatting(item.text)}
+        </span>
+      </div>
+    );
+  }
+
+  // Cross / Avoid Bullet (✗, ✘, ❌)
+  if (item.kind === 'cross') {
+    return (
+      <div
+        key={`list-cross-${index}`}
+        className={`flex items-start gap-3 my-1.5 py-0.5 ${indentClass}`}
+      >
+        <span className="w-5 h-5 rounded-full bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 mt-0.5 border border-rose-300/60 dark:border-rose-800/60 shadow-xs">
+          <X className="w-3.5 h-3.5 stroke-[2.5]" />
+        </span>
+        <span className={`text-slate-700 dark:text-slate-300 ${typography.list}`}>
+          {renderInlineFormatting(item.text)}
+        </span>
+      </div>
+    );
+  }
+
+  // Roman Numerals (i., ii., iii. or I., II., III.)
+  if (item.kind === 'roman-lower' || item.kind === 'roman-upper') {
+    return (
+      <div
+        key={`list-roman-${index}`}
+        className={`flex items-start gap-3 my-1.5 py-0.5 ${indentClass}`}
+      >
+        <span className="min-w-[24px] h-[22px] px-1.5 rounded-md bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 border border-violet-200/80 dark:border-violet-800/80 font-mono text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+          {item.marker}
+        </span>
+        <span className={`text-slate-700 dark:text-slate-300 ${typography.list}`}>
+          {renderInlineFormatting(item.text)}
+        </span>
+      </div>
+    );
+  }
+
+  // Alphabet Lists (a., b., c. or A., B., C.)
+  if (item.kind === 'alpha-lower' || item.kind === 'alpha-upper') {
+    return (
+      <div
+        key={`list-alpha-${index}`}
+        className={`flex items-start gap-3 my-1.5 py-0.5 ${indentClass}`}
+      >
+        <span className="min-w-[22px] h-[22px] px-1.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 font-mono text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+          {item.marker}
+        </span>
+        <span className={`text-slate-700 dark:text-slate-300 ${typography.list}`}>
+          {renderInlineFormatting(item.text)}
+        </span>
+      </div>
+    );
+  }
+
+  // Decimal / Numbered Lists (1., 2., 3.)
+  if (item.kind === 'decimal') {
+    return (
+      <div
+        key={`list-dec-${index}`}
+        className={`flex items-start gap-3 my-1.5 py-0.5 ${indentClass}`}
+      >
+        <span className="min-w-[22px] h-[22px] px-1.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+          {item.marker}
+        </span>
+        <span className={`text-slate-700 dark:text-slate-300 ${typography.list}`}>
+          {renderInlineFormatting(item.text)}
+        </span>
+      </div>
+    );
+  }
+
+  // Standard Bullets (-, *, +, •)
+  return (
+    <div
+      key={`list-bullet-${index}`}
+      className={`flex items-start gap-3 my-1.5 py-0.5 ${indentClass}`}
+    >
+      <span className="w-2 h-2 rounded-full bg-indigo-500 dark:bg-indigo-400 ring-4 ring-indigo-100 dark:ring-indigo-950/60 shrink-0 mt-2 mx-1.5"></span>
+      <span className={`text-slate-700 dark:text-slate-300 ${typography.list}`}>
+        {renderInlineFormatting(item.text)}
+      </span>
+    </div>
+  );
 }
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
@@ -57,7 +345,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
     }));
   };
 
-  // Comprehensive font size & typography scaling for all elements
+  // Comprehensive font size & typography scaling
   const typography = useMemo(() => {
     switch (fontSize) {
       case 'sm':
@@ -71,6 +359,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           h1: 'text-2xl sm:text-3xl',
           h2: 'text-xl sm:text-2xl',
           h3: 'text-base sm:text-lg',
+          h4: 'text-sm sm:text-base',
+          h5: 'text-xs sm:text-sm',
+          h6: 'text-[11px] sm:text-xs',
           quizQuestion: 'text-sm sm:text-base',
           quizOption: 'text-xs sm:text-sm'
         };
@@ -85,6 +376,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           h1: 'text-3xl sm:text-4xl lg:text-5xl',
           h2: 'text-2xl sm:text-3xl',
           h3: 'text-xl sm:text-2xl',
+          h4: 'text-lg sm:text-xl',
+          h5: 'text-base sm:text-lg',
+          h6: 'text-xs sm:text-sm',
           quizQuestion: 'text-lg sm:text-xl',
           quizOption: 'text-sm sm:text-base'
         };
@@ -99,6 +393,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           h1: 'text-4xl sm:text-5xl',
           h2: 'text-3xl sm:text-4xl',
           h3: 'text-2xl sm:text-3xl',
+          h4: 'text-xl sm:text-2xl',
+          h5: 'text-lg sm:text-xl',
+          h6: 'text-sm sm:text-base',
           quizQuestion: 'text-xl sm:text-2xl',
           quizOption: 'text-base sm:text-lg'
         };
@@ -114,13 +411,16 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           h1: 'text-3xl sm:text-4xl',
           h2: 'text-2xl sm:text-2xl',
           h3: 'text-lg sm:text-xl',
+          h4: 'text-base sm:text-lg',
+          h5: 'text-sm sm:text-base',
+          h6: 'text-xs sm:text-sm',
           quizQuestion: 'text-base sm:text-lg',
           quizOption: 'text-xs sm:text-sm'
         };
     }
   }, [fontSize]);
 
-  // Extract headings list for TOC
+  // Extract headings list for TOC (Levels 1 to 6)
   const extractedHeadings = useMemo(() => {
     const list: { id: string; text: string; level: number }[] = [];
     const lines = content.split('\n');
@@ -134,7 +434,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
       if (inCode) continue;
 
       if (line.startsWith('#')) {
-        const match = line.match(/^(#{1,4})\s+(.+)$/);
+        const match = line.match(/^(#{1,6})\s+(.+)$/);
         if (match) {
           const level = match[1].length;
           const text = match[2].trim();
@@ -171,6 +471,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
     let inTable = false;
     let tableHeaders: string[] = [];
+    let tableAlignments: string[] = [];
     let tableRows: string[][] = [];
     let tableIndex = 0;
 
@@ -179,45 +480,26 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
     let blockquoteLines: string[] = [];
     let blockquoteIndex = 0;
 
-    let inList: 'ul' | 'ol' | null = null;
-    let listItems: { text: string; num?: number }[] = [];
-    let listStartIndex = 1;
-    let listIndex = 0;
+    let currentListGroup: ParsedListItem[] = [];
+    let listGroupIndex = 0;
 
-    const flushList = () => {
-      if (inList && listItems.length > 0) {
-        const key = `list-${listIndex++}`;
-        if (inList === 'ul') {
-          nodes.push(
-            <ul
-              key={key}
-              className={`my-4 ml-6 space-y-2 list-disc text-slate-700 dark:text-slate-300 marker:text-indigo-500 ${typography.list}`}
-            >
-              {listItems.map((item, idx) => (
-                <li key={`ul-item-${idx}`} className="pl-1">
-                  {renderInlineFormatting(item.text)}
-                </li>
-              ))}
-            </ul>
-          );
-        } else if (inList === 'ol') {
-          nodes.push(
-            <ol
-              key={key}
-              start={listStartIndex}
-              className={`my-4 ml-6 space-y-2 list-decimal text-slate-700 dark:text-slate-300 marker:text-indigo-600 dark:marker:text-indigo-400 font-medium ${typography.list}`}
-            >
-              {listItems.map((item, idx) => (
-                <li key={`ol-item-${idx}`} value={item.num} className="pl-1">
-                  <span className="font-normal">{renderInlineFormatting(item.text)}</span>
-                </li>
-              ))}
-            </ol>
-          );
-        }
-        inList = null;
-        listItems = [];
-        listStartIndex = 1;
+    const flushListGroup = () => {
+      if (currentListGroup.length > 0) {
+        const key = `list-group-${listGroupIndex++}`;
+        nodes.push(
+          <div key={key} className="my-4 space-y-1.5">
+            {currentListGroup.map((item, idx) =>
+              renderListItemNode(
+                item,
+                idx,
+                typography,
+                checkedItems[item.id || ''],
+                toggleCheckItem
+              )
+            )}
+          </div>
+        );
+        currentListGroup = [];
       }
     };
 
@@ -248,8 +530,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           label = '';
         }
 
-        // Parse bullet points within blockquote content
-        const blockquoteNodes = parseBlockquoteContent(fullText, typography);
+        // Parse bullet points & extended lists within blockquote content
+        const blockquoteNodes = parseBlockquoteContent(fullText, typography, checkedItems, toggleCheckItem);
 
         nodes.push(
           <div key={key} className={`my-6 rounded-2xl border p-4.5 transition-all ${borderClass}`}>
@@ -275,11 +557,11 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         const key = `table-${tableIndex++}`;
         nodes.push(
           <div key={key} className="my-6 overflow-x-auto rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 shadow-xs">
-            <table className={`w-full text-left ${typography.table}`}>
+            <table className={`w-full ${typography.table}`}>
               <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-800">
                 <tr>
                   {tableHeaders.map((header, i) => (
-                    <th key={i} className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">
+                    <th key={i} className={`px-4 py-3 font-semibold text-slate-800 dark:text-slate-200 ${tableAlignments[i] || 'text-left'}`}>
                       {renderInlineFormatting(header.trim())}
                     </th>
                   ))}
@@ -289,7 +571,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                 {tableRows.map((row, rIdx) => (
                   <tr key={rIdx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                     {row.map((cell, cIdx) => (
-                      <td key={cIdx} className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                      <td key={cIdx} className={`px-4 py-3 text-slate-600 dark:text-slate-300 ${tableAlignments[cIdx] || 'text-left'}`}>
                         {renderInlineFormatting(cell.trim())}
                       </td>
                     ))}
@@ -301,6 +583,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         );
         inTable = false;
         tableHeaders = [];
+        tableAlignments = [];
         tableRows = [];
       }
     };
@@ -346,7 +629,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                   </div>
                   <button
                     onClick={() => handleCopyCode(codeText, codeId)}
-                    className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white px-2.5 py-1 rounded-lg hover:bg-slate-800/60 transition-colors"
+                    className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white px-2.5 py-1 rounded-lg hover:bg-slate-800/60 transition-colors cursor-pointer"
                     title="Copy code to clipboard"
                   >
                     {copiedCodeId === codeId ? (
@@ -372,7 +655,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           codeContent = [];
           codeLanguage = '';
         } else {
-          flushList();
+          flushListGroup();
           flushBlockquote();
           flushTable();
           inCodeBlock = true;
@@ -388,7 +671,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
       // Blockquotes & Callouts
       if (line.trim().startsWith('>')) {
-        flushList();
+        flushListGroup();
         flushTable();
         const trimmed = line.trim().slice(1).trim();
         if (!inBlockquote) {
@@ -428,15 +711,21 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
       // Markdown Tables
       if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
-        flushList();
+        flushListGroup();
         const cells = line.trim().split('|').slice(1, -1);
         if (!inTable) {
           inTable = true;
           tableHeaders = cells;
           continue;
         } else {
-          // Check if it's separator row (e.g. |---|---|)
+          // Check if it's separator row (e.g. | :--- | :---: | ---: |)
           if (cells.every(c => /^[\s:-]+$/.test(c))) {
+            tableAlignments = cells.map(c => {
+              const trimmed = c.trim();
+              if (trimmed.startsWith(':') && trimmed.endsWith(':')) return 'text-center';
+              if (trimmed.endsWith(':')) return 'text-right';
+              return 'text-left';
+            });
             continue;
           }
           tableRows.push(cells);
@@ -446,10 +735,10 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         flushTable();
       }
 
-      // Headings
+      // Headings (#, ##, ###, ####, #####, ######)
       if (line.startsWith('#')) {
-        flushList();
-        const match = line.match(/^(#{1,4})\s+(.+)$/);
+        flushListGroup();
+        const match = line.match(/^(#{1,6})\s+(.+)$/);
         if (match) {
           const level = match[1].length;
           const text = match[2].trim();
@@ -458,8 +747,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
           if (level === 1) {
             nodes.push(
-              <h1 key={`h1-${i}`} id={slug} className={`${typography.h1} font-extrabold tracking-tight text-slate-900 dark:text-white mt-10 mb-4 font-display scroll-mt-20`}>
-                {renderInlineFormatting(text)}
+              <h1 key={`h1-${i}`} id={slug} className={`${typography.h1} font-extrabold tracking-tight text-slate-900 dark:text-white mt-10 mb-4 font-display scroll-mt-20 flex items-center gap-2 group`}>
+                <span>{renderInlineFormatting(text)}</span>
+                <a href={`#${slug}`} className="opacity-0 group-hover:opacity-100 text-indigo-500 text-sm transition-opacity">#</a>
               </h1>
             );
           } else if (level === 2) {
@@ -471,41 +761,60 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
             );
           } else if (level === 3) {
             nodes.push(
-              <h3 key={`h3-${i}`} id={slug} className={`${typography.h3} font-bold text-slate-800 dark:text-slate-100 mt-7 mb-2.5 font-display scroll-mt-20`}>
-                {renderInlineFormatting(text)}
+              <h3 key={`h3-${i}`} id={slug} className={`${typography.h3} font-bold text-slate-800 dark:text-slate-100 mt-7 mb-2.5 font-display scroll-mt-20 flex items-center gap-2 group`}>
+                <span>{renderInlineFormatting(text)}</span>
+                <a href={`#${slug}`} className="opacity-0 group-hover:opacity-100 text-indigo-500 text-sm transition-opacity">#</a>
               </h3>
+            );
+          } else if (level === 4) {
+            nodes.push(
+              <h4 key={`h4-${i}`} id={slug} className={`${typography.h4} font-semibold text-slate-800 dark:text-slate-200 mt-5 mb-2 scroll-mt-20 flex items-center gap-2 group`}>
+                <span>{renderInlineFormatting(text)}</span>
+                <a href={`#${slug}`} className="opacity-0 group-hover:opacity-100 text-indigo-500 text-xs transition-opacity">#</a>
+              </h4>
+            );
+          } else if (level === 5) {
+            nodes.push(
+              <h5 key={`h5-${i}`} id={slug} className={`${typography.h5} font-semibold text-slate-700 dark:text-slate-300 mt-4 mb-1.5 scroll-mt-20 flex items-center gap-2 group`}>
+                <span>{renderInlineFormatting(text)}</span>
+                <a href={`#${slug}`} className="opacity-0 group-hover:opacity-100 text-indigo-500 text-xs transition-opacity">#</a>
+              </h5>
             );
           } else {
             nodes.push(
-              <h4 key={`h4-${i}`} id={slug} className="text-base font-semibold text-slate-800 dark:text-slate-200 mt-5 mb-2 scroll-mt-20">
-                {renderInlineFormatting(text)}
-              </h4>
+              <h6 key={`h6-${i}`} id={slug} className={`${typography.h6} font-medium text-slate-600 dark:text-slate-400 mt-3.5 mb-1 scroll-mt-20 uppercase tracking-wider flex items-center gap-2 group`}>
+                <span>{renderInlineFormatting(text)}</span>
+                <a href={`#${slug}`} className="opacity-0 group-hover:opacity-100 text-indigo-500 text-[10px] transition-opacity">#</a>
+              </h6>
             );
           }
           continue;
         }
       }
 
-      // Standalone Image Line Match: ![alt](url "optional caption") or ![alt](url)
-      const imgBlockMatch = line.trim().match(/^!\[(.*?)\]\((\S+?)(?:\s+["'](.*?)["'])?\)$/);
+      // Standalone Image Line Match: ![alt](<url with spaces> "optional caption") or ![alt](url "caption") or ![alt](url)
+      const imgBlockMatch = line.trim().match(/^!\[(.*?)\]\((?:<([^>]+)>|([^)\s]+))(?:\s+["'](.*?)["'])?\)$/);
       if (imgBlockMatch) {
-        flushList();
+        flushListGroup();
         flushBlockquote();
         flushTable();
+        const src = imgBlockMatch[2] || imgBlockMatch[3];
+        const alt = imgBlockMatch[1];
+        const caption = imgBlockMatch[4] || alt;
         nodes.push(
           <ImageViewer
             key={`img-${i}`}
-            src={imgBlockMatch[2]}
-            alt={imgBlockMatch[1]}
-            caption={imgBlockMatch[3] || imgBlockMatch[1]}
+            src={src}
+            alt={alt}
+            caption={caption}
           />
         );
         continue;
       }
 
-      // Horizontal rule / Divider
+      // Horizontal rule / Divider (---, ***, ___)
       if (line.trim() === '---' || line.trim() === '***' || line.trim() === '___') {
-        flushList();
+        flushListGroup();
         nodes.push(
           <div key={`hr-${i}`} className="my-8 flex items-center justify-center gap-2">
             <span className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-800 to-transparent"></span>
@@ -516,80 +825,23 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
         continue;
       }
 
-      // Checklists (e.g. - [ ] or - [x])
-      const checkMatch = line.match(/^(\s*)[-*+]\s+\[([ xX])\]\s+(.+)$/);
-      if (checkMatch) {
-        flushList();
-        const isDefaultChecked = checkMatch[2].toLowerCase() === 'x';
-        const itemText = checkMatch[3];
-        const checkId = `check-${i}-${itemText.slice(0, 10)}`;
-        const isCurrentChecked = checkedItems[checkId] !== undefined ? checkedItems[checkId] : isDefaultChecked;
-
-        nodes.push(
-          <div
-            key={checkId}
-            onClick={() => toggleCheckItem(checkId, isDefaultChecked)}
-            className="flex items-start gap-3 my-2 cursor-pointer group py-1 px-2 -mx-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
-          >
-            <div className={`mt-1 w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
-              isCurrentChecked
-                ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
-                : 'border-slate-300 dark:border-slate-700 group-hover:border-indigo-400 bg-white dark:bg-slate-900'
-            }`}>
-              {isCurrentChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-            </div>
-            <span className={`${typography.checkItem} transition-colors ${
-              isCurrentChecked
-                ? 'line-through text-slate-400 dark:text-slate-500'
-                : 'text-slate-700 dark:text-slate-300'
-            }`}>
-              {renderInlineFormatting(itemText)}
-            </span>
-          </div>
-        );
-        continue;
-      }
-
-      // Unordered Lists (*, -, +)
-      const listMatch = line.match(/^(\s*)[-*+]\s+(.+)$/);
-      if (listMatch) {
+      // Unified List Classifier (Checklists, Check signs, Alphabet bullets, Roman numerals, Decimal numbers, Standard bullets)
+      const listItem = classifyListItem(line, i);
+      if (listItem) {
         flushBlockquote();
         flushTable();
-        if (inList === 'ol') {
-          flushList();
-        }
-        if (!inList) {
-          inList = 'ul';
-        }
-        listItems.push({ text: listMatch[2].trim() });
-        continue;
-      }
-
-      // Ordered / Numbered Lists (1., 2., 1), 2), etc.)
-      const olMatch = line.match(/^(\s*)(\d+)[.)]\s+(.+)$/);
-      if (olMatch) {
-        flushBlockquote();
-        flushTable();
-        if (inList === 'ul') {
-          flushList();
-        }
-        const itemNum = parseInt(olMatch[2], 10) || 1;
-        if (!inList) {
-          inList = 'ol';
-          listStartIndex = itemNum;
-        }
-        listItems.push({ text: olMatch[3].trim(), num: itemNum });
+        currentListGroup.push(listItem);
         continue;
       }
 
       // Empty line
       if (!line.trim()) {
-        flushList();
+        flushListGroup();
         continue;
       }
 
       // Regular Paragraph
-      flushList();
+      flushListGroup();
       nodes.push(
         <p key={`p-${i}`} className={`my-4 text-slate-700 dark:text-slate-300 ${typography.paragraph}`}>
           {renderInlineFormatting(line)}
@@ -598,7 +850,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
     }
 
     // Flush any remaining blocks
-    flushList();
+    flushListGroup();
     flushBlockquote();
     flushTable();
 
@@ -660,6 +912,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
               {submittedQuiz && (
                 <button
+                  type="button"
                   onClick={handleResetQuiz}
                   className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                 >
@@ -715,7 +968,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                             type="button"
                             disabled={submittedQuiz}
                             onClick={() => handleAnswerSelect(q.id, optIdx)}
-                            className={`w-full text-left p-3.5 rounded-xl border ${typography.quizOption} transition-all flex items-center justify-between gap-3 ${optionStyle}`}
+                            className={`w-full text-left p-3.5 rounded-xl border ${typography.quizOption} transition-all flex items-center justify-between gap-3 cursor-pointer ${optionStyle}`}
                           >
                             <span>{option}</span>
                             {submittedQuiz && optIdx === q.correctAnswer && (
@@ -775,18 +1028,24 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   );
 };
 
-// Parse blockquote content into proper React nodes with bullet list support
-function parseBlockquoteContent(text: string, typography: any): React.ReactNode {
+// Parse blockquote content into proper React nodes with full bullet & list support
+function parseBlockquoteContent(
+  text: string,
+  typography: any,
+  checkedItems: Record<string, boolean> = {},
+  toggleCheckItem?: (id: string, initialChecked: boolean) => void
+): React.ReactNode {
   const lines = text.split('\n');
   const nodes: React.ReactNode[] = [];
   let currentParagraph: string[] = [];
+  let currentListGroup: ParsedListItem[] = [];
 
   const flushParagraph = () => {
     if (currentParagraph.length > 0) {
       const paraText = currentParagraph.join('\n').trim();
       if (paraText) {
         nodes.push(
-          <p key={`bq-p-${nodes.length}`} className={`${typography.blockquote}`}>
+          <p key={`bq-p-${nodes.length}`} className={`${typography.blockquote} whitespace-pre-line my-1.5`}>
             {renderInlineFormatting(paraText)}
           </p>
         );
@@ -795,120 +1054,289 @@ function parseBlockquoteContent(text: string, typography: any): React.ReactNode 
     }
   };
 
-  let inList = false;
-  let listItems: string[] = [];
+  const flushList = () => {
+    if (currentListGroup.length > 0) {
+      const key = `bq-list-${nodes.length}`;
+      nodes.push(
+        <div key={key} className="my-2.5 space-y-1.5">
+          {currentListGroup.map((item, idx) =>
+            renderListItemNode(
+              item,
+              idx,
+              typography,
+              checkedItems[item.id || ''],
+              toggleCheckItem
+            )
+          )}
+        </div>
+      );
+      currentListGroup = [];
+    }
+  };
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const trimmed = line.trim();
 
-    // Bullet list item
-    if (trimmed.match(/^[-*+]\s+(.+)$/)) {
+    // Check if it's a list item
+    const listItem = classifyListItem(line, i);
+    if (listItem) {
       flushParagraph();
-      if (!inList) {
-        inList = true;
-        listItems = [];
-      }
-      listItems.push(trimmed.replace(/^[-*+]\s+/, ''));
+      currentListGroup.push(listItem);
       continue;
     }
 
-    // Numbered list item
-    if (trimmed.match(/^\d+[.)]\s+(.+)$/)) {
-      flushParagraph();
-      if (!inList) {
-        inList = true;
-        listItems = [];
-      }
-      listItems.push(trimmed.replace(/^\d+[.)]\s+/, ''));
-      continue;
-    }
-
-    // Empty line (blank line) - creates paragraph break
+    // Blank line (paragraph boundary)
     if (!trimmed) {
+      flushList();
       flushParagraph();
       continue;
     }
 
-    // Regular content - but if we're in a list, flush first
-    if (inList) {
-      flushParagraph();
-      nodes.push(
-        <ul key={`bq-ul-${nodes.length}`} className={`ml-4 my-2 space-y-1.5 list-disc marker:text-indigo-500 ${typography.list}`}>
-          {listItems.map((item, idx) => (
-            <li key={`bq-li-${idx}`} className="pl-1">
-              {renderInlineFormatting(item)}
-            </li>
-          ))}
-        </ul>
-      );
-      inList = false;
-      listItems = [];
-    }
-
+    // Regular line in blockquote
+    flushList();
     currentParagraph.push(line);
   }
 
-  // Flush any remaining
-  if (inList && listItems.length > 0) {
-    flushParagraph();
-    nodes.push(
-      <ul key={`bq-ul-${nodes.length}`} className={`ml-4 my-2 space-y-1.5 list-disc marker:text-indigo-500 ${typography.list}`}>
-        {listItems.map((item, idx) => (
-          <li key={`bq-li-${idx}`} className="pl-1">
-            {renderInlineFormatting(item)}
-          </li>
-        ))}
-      </ul>
-    );
-  } else {
-    flushParagraph();
-  }
+  // Flush remaining
+  flushList();
+  flushParagraph();
 
   return nodes.length === 1 ? nodes[0] : <>{nodes}</>;
 }
 
-// Helper function to render bold, italic, inline code, and links
+// Helper to clean trailing sentence punctuation from URLs while preserving balanced parentheses
+function cleanTrailingPunctuation(rawUrl: string): { cleanUrl: string; trailing: string } {
+  let cleanUrl = rawUrl;
+  let trailing = '';
+  while (cleanUrl.length > 0 && /[.,;:!?)}'"]$/.test(cleanUrl)) {
+    if (cleanUrl.endsWith(')')) {
+      const openCount = (cleanUrl.match(/\(/g) || []).length;
+      const closeCount = (cleanUrl.match(/\)/g) || []).length;
+      if (closeCount <= openCount) break;
+    }
+    trailing = cleanUrl.slice(-1) + trailing;
+    cleanUrl = cleanUrl.slice(0, -1);
+  }
+  return { cleanUrl, trailing };
+}
+
+// Strict regex pattern for recognized URL/socket/tel/mail protocols and valid email formats
+const PROTOCOL_AUTOLINK_REGEX = /(https?:\/\/[^\s<>"']+|wss?:\/\/[^\s<>"']+|ftps?:\/\/[^\s<>"']+|tel:[+\d()-]+|mailto:[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}|mail:[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}|www\.[a-zA-Z0-9-]+\.[a-zA-Z]{2,}[^\s<>"']*|[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,})/gi;
+
+// Sub-tokenizer for unformatted text that strictly detects valid protocol URLs, sockets, tel, mailto, www domains, and email addresses
+function renderPlainWithAutolinks(text: string, baseKey: string | number): React.ReactNode {
+  if (!text) return null;
+  const parts = text.split(PROTOCOL_AUTOLINK_REGEX);
+  if (parts.length === 1) return text;
+
+  return parts.map((segment, idx) => {
+    if (!segment) return null;
+
+    const isHttp = /^https?:\/\//i.test(segment);
+    const isWs = /^wss?:\/\//i.test(segment);
+    const isFtp = /^ftps?:\/\//i.test(segment);
+    const isTel = /^tel:[+\d()-]+/i.test(segment);
+    const isMailtoPrefix = /^(mailto|mail):[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}/i.test(segment);
+    const isWww = /^www\.[a-zA-Z0-9-]+\.[a-zA-Z]{2,}/i.test(segment);
+    const isEmail = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$/.test(segment);
+
+    if (isHttp || isWs || isFtp || isTel || isMailtoPrefix || isWww || isEmail) {
+      const { cleanUrl, trailing } = cleanTrailingPunctuation(segment);
+      if (!cleanUrl) return segment;
+
+      let href = cleanUrl;
+      let isExternal = true;
+
+      if (cleanUrl.toLowerCase().startsWith('www.')) {
+        href = `https://${cleanUrl}`;
+      } else if (cleanUrl.toLowerCase().startsWith('mail:')) {
+        href = `mailto:${cleanUrl.slice(5)}`;
+        isExternal = false;
+      } else if (cleanUrl.toLowerCase().startsWith('mailto:') || cleanUrl.toLowerCase().startsWith('tel:')) {
+        isExternal = false;
+      } else if (isEmail) {
+        href = `mailto:${cleanUrl}`;
+        isExternal = false;
+      }
+
+      return (
+        <React.Fragment key={`${baseKey}-autolink-${idx}`}>
+          <a
+            href={href}
+            target={isExternal ? '_blank' : undefined}
+            rel={isExternal ? 'noopener noreferrer' : undefined}
+            className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline inline-flex items-center gap-0.5 break-all cursor-pointer"
+          >
+            <span>{cleanUrl}</span>
+            {isExternal && <ExternalLink className="w-3 h-3 inline ml-0.5 shrink-0 opacity-70" />}
+          </a>
+          {trailing && <span>{trailing}</span>}
+        </React.Fragment>
+      );
+    }
+    return <React.Fragment key={`${baseKey}-txt-${idx}`}>{segment}</React.Fragment>;
+  });
+}
+
+// Enhanced inline formatting renderer supporting code, kbd, bold, italic, bold-italic, strike, highlight, sup/sub, links & autolinks
 function renderInlineFormatting(text: string): React.ReactNode {
-  // Regex to split by `code`, **bold**, *italic*, [link](url)
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g);
+  if (!text) return null;
+
+  // Split by markdown formatting syntax & bracketed autolinks with valid protocol/email (<https://...>, <ws://...>, <tel:...>, <user@email.com>)
+  const pattern = /(`[^`]+`|<kbd>[^<]+<\/kbd>|<(?:(?:https?|wss?|ftps?):\/\/[^\s>]+|tel:[+\d()-]+|(?:mailto|mail):[^\s>]+|[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}|www\.[^\s>]+)>|~~[^~]+~~|==[^=]+==|\*\*\*[^*]+\*\*\*|___[^_]+___|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|\^[^^]+\^|\[[^\]]+\]\([^)]+\))/gi;
+  const parts = text.split(pattern);
 
   return parts.map((part, index) => {
-    if (part.startsWith('`') && part.endsWith('`')) {
+    if (!part) return null;
+
+    // Inline Code: `code`
+    if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
       return (
-        <code key={index} className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-mono text-[0.88em] font-medium border border-slate-200/60 dark:border-slate-700/60">
+        <code
+          key={index}
+          className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-mono text-[0.88em] font-medium border border-slate-200/60 dark:border-slate-700/60"
+        >
           {part.slice(1, -1)}
         </code>
       );
     }
-    if (part.startsWith('**') && part.endsWith('**')) {
+
+    // Keyboard Key: <kbd>key</kbd>
+    if (part.toLowerCase().startsWith('<kbd>') && part.toLowerCase().endsWith('</kbd>')) {
+      return (
+        <kbd
+          key={index}
+          className="px-1.5 py-0.5 text-xs font-mono font-semibold bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md shadow-xs text-slate-800 dark:text-slate-200"
+        >
+          {part.slice(5, -6)}
+        </kbd>
+      );
+    }
+
+    // Bracketed Autolinks with strict protocol validation: <https://...>, <ws://...>, <tel:...>, <user@example.com>, <mailto:...>
+    if (part.startsWith('<') && part.endsWith('>') && part.length >= 3) {
+      const inner = part.slice(1, -1).trim();
+      const isEmail = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$/.test(inner);
+      const isHttpOrWsOrFtp = /^(https?:\/\/|wss?:\/\/|ftps?:\/\/)/i.test(inner);
+      const isMailto = /^(mailto|mail):/i.test(inner) || isEmail;
+      const isTel = /^tel:/i.test(inner);
+      const isWww = /^www\./i.test(inner);
+
+      if (isHttpOrWsOrFtp || isMailto || isTel || isWww) {
+        let href = inner;
+        let isExternal = true;
+
+        if (isEmail) {
+          href = `mailto:${inner}`;
+          isExternal = false;
+        } else if (inner.toLowerCase().startsWith('mail:')) {
+          href = `mailto:${inner.slice(5)}`;
+          isExternal = false;
+        } else if (isTel || inner.toLowerCase().startsWith('mailto:')) {
+          isExternal = false;
+        } else if (isWww) {
+          href = `https://${inner}`;
+        }
+
+        return (
+          <a
+            key={index}
+            href={href}
+            target={isExternal ? '_blank' : undefined}
+            rel={isExternal ? 'noopener noreferrer' : undefined}
+            className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline inline-flex items-center gap-0.5 break-all cursor-pointer"
+          >
+            <span>{inner}</span>
+            {isExternal && <ExternalLink className="w-3 h-3 inline ml-0.5 shrink-0 opacity-70" />}
+          </a>
+        );
+      }
+
+      // If bracketed string is not a valid protocol URI (e.g. <T>, <Component>), render as normal text
+      return renderPlainWithAutolinks(part, index);
+    }
+
+    // Strikethrough: ~~text~~
+    if (part.startsWith('~~') && part.endsWith('~~') && part.length >= 4) {
+      return (
+        <del key={index} className="line-through text-slate-400 dark:text-slate-500">
+          {renderInlineFormatting(part.slice(2, -2))}
+        </del>
+      );
+    }
+
+    // Highlight: ==text==
+    if (part.startsWith('==') && part.endsWith('==') && part.length >= 4) {
+      return (
+        <mark
+          key={index}
+          className="bg-amber-100 dark:bg-amber-900/50 text-amber-900 dark:text-amber-200 px-1.5 py-0.5 rounded-md font-medium"
+        >
+          {renderInlineFormatting(part.slice(2, -2))}
+        </mark>
+      );
+    }
+
+    // Bold Italic: ***text*** or ___text___
+    if ((part.startsWith('***') && part.endsWith('***') && part.length >= 6) ||
+        (part.startsWith('___') && part.endsWith('___') && part.length >= 6)) {
+      return (
+        <strong key={index} className="font-bold italic text-slate-900 dark:text-white">
+          {part.slice(3, -3)}
+        </strong>
+      );
+    }
+
+    // Bold: **text** or __text__
+    if ((part.startsWith('**') && part.endsWith('**') && part.length >= 4) ||
+        (part.startsWith('__') && part.endsWith('__') && part.length >= 4)) {
       return (
         <strong key={index} className="font-bold text-slate-900 dark:text-white">
           {part.slice(2, -2)}
         </strong>
       );
     }
-    if (part.startsWith('*') && part.endsWith('*')) {
+
+    // Italic: *text* or _text_
+    if ((part.startsWith('*') && part.endsWith('*') && part.length >= 2) ||
+        (part.startsWith('_') && part.endsWith('_') && part.length >= 2)) {
       return (
         <em key={index} className="italic text-slate-800 dark:text-slate-200">
           {part.slice(1, -1)}
         </em>
       );
     }
+
+    // Superscript: ^text^
+    if (part.startsWith('^') && part.endsWith('^') && part.length >= 2) {
+      return (
+        <sup key={index} className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+          {part.slice(1, -1)}
+        </sup>
+      );
+    }
+
+    // Markdown Link: [text](url)
     const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
     if (linkMatch) {
+      const linkHref = linkMatch[2];
+      const isMailto = linkHref.startsWith('mailto:');
       return (
         <a
           key={index}
-          href={linkMatch[2]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline inline-flex items-center gap-0.5"
+          href={linkHref}
+          target={isMailto ? undefined : '_blank'}
+          rel={isMailto ? undefined : 'noopener noreferrer'}
+          className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline inline-flex items-center gap-0.5 cursor-pointer"
         >
-          {linkMatch[1]}
-          <ExternalLink className="w-3 h-3 inline" />
+          <span>{linkMatch[1]}</span>
+          {!isMailto && <ExternalLink className="w-3 h-3 inline ml-0.5 shrink-0 opacity-70" />}
         </a>
       );
     }
-    return part;
+
+    // Unformatted text segment: run bare URL & email autolinker
+    return renderPlainWithAutolinks(part, index);
   });
 }

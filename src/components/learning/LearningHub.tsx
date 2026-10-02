@@ -14,13 +14,29 @@ import {
   ExternalLink,
   Search,
   Check,
+  CheckCheck,
   Zap,
-  RotateCcw
+  RotateCcw,
+  Copy,
+  Download,
+  Medal,
+  Target,
+  Star,
+  Trophy,
+  Flame,
+  BookOpen as BookOpenIcon,
+  CheckCircle2 as CheckCircle2Icon,
+  Zap as ZapIcon,
+  Brain as BrainIcon,
+  Bookmark as BookmarkIcon,
+  FileText as FileTextIcon,
+  PenSquare
 } from 'lucide-react';
 import { Course, UserProgress } from '../../types';
 import { GRADIENT_THEMES } from '../../utils/theme';
 import { getCourseIcon } from '../../utils/icons';
 import { storageService } from '../../services/storage';
+import { calculateMedalTier, getMedalTierLabel, getMedalTierColors, getMedalIcon, getUserBadges, calculateAllQuizMedals, MedalTier } from '../../utils/badges';
 
 interface LearningHubProps {
   courses: Course[];
@@ -37,8 +53,9 @@ export const LearningHub: React.FC<LearningHubProps> = ({
   onNavigateToCatalog,
   onOpenCertificate
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'bookmarks' | 'notes' | 'quizzes'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'bookmarks' | 'notes' | 'quizzes' | 'badges'>('overview');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [copiedNoteId, setCopiedNoteId] = useState<string | null>(null);
 
   // Collect all topics with their parent course and module metadata
   const allTopicsIndex = useMemo(() => {
@@ -65,6 +82,45 @@ export const LearningHub: React.FC<LearningHubProps> = ({
   const notesCount = Object.keys(progress.topicNotes || {}).filter(k => progress.topicNotes[k]?.trim()).length;
   const bookmarksCount = progress.bookmarkedTopicIds?.length || 0;
   const quizCount = Object.keys(progress.quizResults || {}).length;
+
+  // Compute user badges and medal tiers
+  const userBadges = useMemo(() => getUserBadges(progress, courses), [progress, courses]);
+  const quizMedals = useMemo(() => calculateAllQuizMedals(progress), [progress]);
+
+  const handleCopyNote = (noteId: string, noteContent: string) => {
+    if (!noteContent.trim()) return;
+    navigator.clipboard.writeText(noteContent);
+    setCopiedNoteId(noteId);
+    setTimeout(() => setCopiedNoteId(null), 2000);
+  };
+
+  const handleExportAllNotes = (format: 'md' | 'txt') => {
+    if (savedNotesList.length === 0) return;
+
+    const header = `# All Study Notes\nCourse: Luminary LMS\nDate: ${new Date().toLocaleDateString()}\nTotal Notes: ${savedNotesList.length}\n\n---\n\n`;
+    const notesContent = savedNotesList
+      .filter(({ note }) => note.trim())
+      .map(({ note, topic }) => {
+        const title = topic?.title || 'Untitled Topic';
+        const courseTitle = topic?.courseTitle || 'Unknown Course';
+        return `## ${title}\n**Course:** ${courseTitle}\n\n${note}\n`;
+      })
+      .join('\n---\n\n');
+
+    const fullContent = format === 'md'
+      ? header + notesContent
+      : header.replace(/^# /, '').replace(/\*\*(.*?)\*\*/g, '$1').replace(/## /g, '') + notesContent.replace(/## /g, '').replace(/\*\*(.*?)\*\*/g, '$1');
+
+    const blob = new Blob([fullContent], { type: format === 'md' ? 'text/markdown;charset=utf-8' : 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `luminary-notes-${new Date().toISOString().split('T')[0]}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   // Calculate completed courses
   const completedCourses = useMemo(() => {
@@ -277,6 +333,18 @@ export const LearningHub: React.FC<LearningHubProps> = ({
               <Brain className="w-3.5 h-3.5" />
               <span>Quizzes & Mastery ({quizCount})</span>
             </button>
+
+            <button
+              onClick={() => setActiveTab('badges')}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeTab === 'badges'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Medal className="w-3.5 h-3.5" />
+              <span>Badges ({userBadges.length})</span>
+            </button>
           </div>
 
           <button
@@ -447,9 +515,29 @@ export const LearningHub: React.FC<LearningHubProps> = ({
           <div className="mt-8">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Personal Study Notes</h2>
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                {savedNotesList.length} notes saved
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {savedNotesList.length} notes saved
+                </span>
+                <button
+                  onClick={() => handleExportAllNotes('md')}
+                  disabled={savedNotesList.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Export all notes as Markdown (.md)"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export .md</span>
+                </button>
+                <button
+                  onClick={() => handleExportAllNotes('txt')}
+                  disabled={savedNotesList.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Export all notes as Plain Text (.txt)"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Export .txt</span>
+                </button>
+              </div>
             </div>
 
             {savedNotesList.length === 0 ? (
@@ -462,35 +550,81 @@ export const LearningHub: React.FC<LearningHubProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {savedNotesList.map(({ topicId, note, topic }) => (
-                  <div
-                    key={topicId}
-                    className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between hover:border-amber-300 dark:hover:border-amber-700 transition-colors"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                          {topic?.courseTitle || 'Course Lesson'}
-                        </span>
-                        {topic && (
-                          <button
-                            onClick={() => onSelectCourse(topic.courseId, topic.id)}
-                            className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
-                          >
-                            <span>Open Topic</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </button>
-                        )}
+                {savedNotesList.map(({ topicId, note, topic }) => {
+                  const isCopied = copiedNoteId === topicId;
+                  return (
+                    <div
+                      key={topicId}
+                      className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex flex-col hover:border-amber-300 dark:hover:border-amber-700 transition-colors"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                            {topic?.courseTitle || 'Course Lesson'}
+                          </span>
+                          {topic && (
+                            <button
+                              onClick={() => onSelectCourse(topic.courseId, topic.id)}
+                              className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                            >
+                              <span>Open Topic</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2">
+                          {topic?.title || `Topic ${topicId}`}
+                        </h3>
+                        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 font-mono whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
+                          {note}
+                        </div>
                       </div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2">
-                        {topic?.title || `Topic ${topicId}`}
-                      </h3>
-                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 font-mono whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
-                        {note}
+
+                      {/* Copy & Export Actions */}
+                      <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                        <button
+                          onClick={() => handleCopyNote(topicId, note)}
+                          disabled={!note.trim()}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                            note.trim()
+                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                              : 'text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                          }`}
+                          title="Copy note to clipboard"
+                        >
+                          {isCopied ? <CheckCheck className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{isCopied ? 'Copied!' : 'Copy'}</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            const title = topic?.title || 'note';
+                            const courseTitle = topic?.courseTitle || 'Course';
+                            const text = `# ${title}\nCourse: ${courseTitle}\nDate: ${new Date().toLocaleDateString()}\n\n---\n\n${note}\n`;
+                            const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-note.md`;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            URL.revokeObjectURL(url);
+                          }}
+                          disabled={!note.trim() || !topic}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                            note.trim() && topic
+                              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800'
+                              : 'text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                          }`}
+                          title="Export note as Markdown (.md)"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Export .md</span>
+                        </button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -519,19 +653,32 @@ export const LearningHub: React.FC<LearningHubProps> = ({
                 {completedQuizzesList.map(({ topicId, score, total, timestamp, topic }) => {
                   const scorePercent = total > 0 ? Math.round((score / total) * 100) : 0;
                   const isPerfect = score === total;
+                  const medalTier = quizMedals[topicId] || 'none';
+                  const medalColors = getMedalTierColors(medalTier);
+                  const medalLabel = getMedalTierLabel(medalTier);
+                  const medalIcon = getMedalIcon(medalTier);
 
                   return (
                     <div
                       key={topicId}
-                      className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-between gap-4"
+                      className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs"
                     >
                       <div className="min-w-0">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
                           {topic?.courseTitle || 'Curriculum'}
                         </span>
-                        <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                        <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate mb-2">
                           {topic?.title || `Topic ${topicId}`}
                         </h3>
+
+                        {/* Medal Badge */}
+                        {medalTier !== 'none' && (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${medalColors.bg} ${medalColors.text} ${medalColors.border} border`}>
+                            <span>{medalIcon}</span>
+                            <span>{medalLabel}</span>
+                          </span>
+                        )}
+
                         <span className="text-[10px] text-slate-400 block mt-1">
                           {new Date(timestamp).toLocaleDateString()}
                         </span>
@@ -553,6 +700,103 @@ export const LearningHub: React.FC<LearningHubProps> = ({
           </div>
         )}
 
+        {/* TAB 5: BADGES & ACHIEVEMENTS */}
+        {activeTab === 'badges' && (
+          <div className="mt-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Badges & Achievements</h2>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {userBadges.length} badges earned
+              </span>
+            </div>
+
+            {userBadges.length === 0 ? (
+              <div className="p-12 text-center rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                <Medal className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">No badges earned yet</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
+                  Complete topics, ace quizzes, write notes, and bookmark lessons to unlock achievements!
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Medal Stats Summary */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {(['gold', 'silver', 'bronze'] as const).map((tier) => {
+                    const count = Object.values(quizMedals).filter(m => m === tier).length;
+                    const colors = getMedalTierColors(tier);
+                    const icon = getMedalIcon(tier);
+                    return (
+                      <div
+                        key={tier}
+                        className={`p-4 rounded-2xl ${colors.bg} ${colors.border} border text-center`}
+                      >
+                        <div className="text-3xl font-bold mb-1">{icon}</div>
+                        <div className={`text-sm font-bold ${colors.text}`}>{count}</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider mt-0.5">
+                          {tier.charAt(0).toUpperCase() + tier.slice(1)} Medals
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-fuchsia-50 via-purple-50 to-indigo-50 dark:from-fuchsia-950/30 dark:via-purple-950/30 dark:to-indigo-950/30 border border-fuchsia-200 dark:border-fuchsia-800 text-center">
+                    <Target className="w-7 h-7 mx-auto text-fuchsia-600 dark:text-fuchsia-400 mb-1" />
+                    <div className="text-sm font-bold text-fuchsia-700 dark:text-fuchsia-300">{userBadges.length}</div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider mt-0.5 text-fuchsia-600 dark:text-fuchsia-400">Total Badges</div>
+                  </div>
+                </div>
+
+                {/* Badges Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {userBadges.map(badge => {
+                    const colors = badge.tier ? getMedalTierColors(badge.tier) : {
+                      bg: 'bg-slate-50 dark:bg-slate-800/60',
+                      text: 'text-slate-700 dark:text-slate-300',
+                      border: 'border-slate-200 dark:border-slate-700',
+                      iconColor: 'text-indigo-500'
+                    };
+                    const IconComponent = badge.icon as keyof typeof import('lucide-react');
+                    return (
+                      <div
+                        key={badge.id}
+                        className={`p-5 rounded-2xl ${colors.bg} ${colors.border} border flex items-start gap-4 transition-all hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 cursor-default`}
+                      >
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${colors.iconColor}`}>
+                          {badge.icon === 'Award' && <Award className="w-5 h-5" />}
+                          {badge.icon === 'Sparkles' && <Sparkles className="w-5 h-5" />}
+                          {badge.icon === 'Zap' && <Zap className="w-5 h-5" />}
+                          {badge.icon === 'Brain' && <Brain className="w-5 h-5" />}
+                          {badge.icon === 'BookOpen' && <BookOpen className="w-5 h-5" />}
+                          {badge.icon === 'FileText' && <FileText className="w-5 h-5" />}
+                          {badge.icon === 'CheckCircle2' && <CheckCircle2 className="w-5 h-5" />}
+                          {badge.icon === 'Bookmark' && <Bookmark className="w-5 h-5" />}
+                          {badge.icon === 'PenSquare' && <PenSquare className="w-5 h-5" />}
+                          {!['Award', 'Sparkles', 'Zap', 'Brain', 'BookOpen', 'FileText', 'CheckCircle2', 'Bookmark', 'PenSquare'].includes(badge.icon) && (
+                            <Award className="w-5 h-5" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-sm font-bold text-slate-900 dark:text-white">{badge.name}</h3>
+                            {badge.tier && (
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${colors.bg} ${colors.text} ${colors.border} border`}>
+                                {getMedalIcon(badge.tier)} {badge.tier.charAt(0).toUpperCase() + badge.tier.slice(1)}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 mb-2">{badge.description}</p>
+                          <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md border ${colors.border} ${colors.text}`}>
+                            {badge.category.charAt(0).toUpperCase() + badge.category.slice(1)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

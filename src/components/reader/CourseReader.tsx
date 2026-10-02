@@ -22,7 +22,11 @@ import {
   Award,
   Minus,
   Plus,
-  Type
+  Type,
+  Copy,
+  Download,
+  AlertCircle,
+  CheckCheck
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Course, UserProgress, AdminUser } from '../../types';
@@ -30,6 +34,7 @@ import { GRADIENT_THEMES } from '../../utils/theme';
 import { getCourseIcon } from '../../utils/icons';
 import { MarkdownRenderer } from '../content/MarkdownRenderer';
 import { storageService } from '../../services/storage';
+import { calculateMedalTier, getMedalTierLabel, getMedalTierColors, getMedalIcon } from '../../utils/badges';
 
 interface CourseReaderProps {
   course: Course;
@@ -132,6 +137,11 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
     }
     return null;
   }, [course, activeTopicId]);
+
+  const wordsCount = useMemo(() => {
+    if (!activeTopicInfo?.topic?.content) return 0;
+    return activeTopicInfo.topic.content.trim().split(/\s+/).filter(Boolean).length;
+  }, [activeTopicInfo]);
 
   // Sync note when active topic changes
   useEffect(() => {
@@ -263,19 +273,59 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
       storageService.saveQuizResult(activeTopicId, score, total);
       onProgressUpdate(storageService.getProgress());
 
-      if (score === total) {
+      const medalTier = calculateMedalTier(score, total);
+      const isPerfect = score === total;
+
+      // Celebrate based on medal tier
+      if (medalTier !== 'none') {
+        const confettiColors: Record<string, string[]> = {
+          gold: ['#f59e0b', '#fbbf24', '#fde047', '#6366f1'],
+          silver: ['#94a3b8', '#cbd5e1', '#e2e8f0', '#6366f1'],
+          bronze: ['#ea580c', '#f97316', '#fb923c', '#6366f1']
+        };
+
         confetti({
-          particleCount: 80,
-          spread: 70,
+          particleCount: isPerfect ? 120 : (medalTier === 'gold' ? 100 : medalTier === 'silver' ? 80 : 60),
+          spread: isPerfect ? 90 : 70,
           origin: { y: 0.6 },
-          colors: ['#10b981', '#6366f1', '#f59e0b']
+          colors: confettiColors[medalTier] || ['#10b981', '#6366f1', '#f59e0b']
+        });
+      } else if (!isPerfect) {
+        // Still celebrate completion
+        confetti({
+          particleCount: 50,
+          spread: 60,
+          origin: { y: 0.8 },
+          colors: ['#6366f1', '#a855f7', '#ec4899', '#10b981']
         });
       }
     }
   };
 
-  // Word count & estimated read
-  const wordsCount = activeTopicInfo?.topic.content.split(/\s+/).length || 0;
+  const [copiedNote, setCopiedNote] = useState<boolean>(false);
+
+  const handleCopyCurrentNote = () => {
+    if (!noteContent.trim()) return;
+    navigator.clipboard.writeText(noteContent);
+    setCopiedNote(true);
+    setTimeout(() => setCopiedNote(false), 2000);
+  };
+
+  const handleExportCurrentNote = () => {
+    if (!noteContent.trim() || !activeTopicInfo) return;
+    const title = activeTopicInfo.topic.title;
+    const courseTitle = course.title;
+    const text = `# ${title}\nCourse: ${courseTitle}\nDate: ${new Date().toLocaleDateString()}\n\n---\n\n${noteContent}\n`;
+    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-note.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="min-h-screen bg-[#FBFBFE] dark:bg-[#0B0F19] transition-colors">
@@ -798,6 +848,11 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
                   <nav className="space-y-1 text-xs max-h-[320px] overflow-y-auto pr-1">
                     {headings.map(h => {
                       const isActive = activeHeadingId === h.id;
+                      let indentClass = 'pl-2 text-xs';
+                      if (h.level === 3) indentClass = 'pl-4 text-[11.5px]';
+                      else if (h.level === 4) indentClass = 'pl-6 text-[11px]';
+                      else if (h.level === 5) indentClass = 'pl-7 text-[10.5px]';
+                      else if (h.level >= 6) indentClass = 'pl-8 text-[10px]';
 
                       return (
                         <button
@@ -807,7 +862,7 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
                             isActive
                               ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/80 dark:bg-indigo-950/60 font-bold border-l-2 border-indigo-600 dark:border-indigo-400 pl-2.5'
                               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50 font-normal'
-                          } ${h.level === 3 ? 'pl-4 text-[11px]' : ''}`}
+                          } ${indentClass}`}
                         >
                           <span className="truncate">{h.text}</span>
                           {isActive && (
@@ -847,6 +902,35 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
                   rows={6}
                   className="w-full text-xs p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
                 />
+                {/* Copy & Export Actions */}
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    onClick={handleCopyCurrentNote}
+                    disabled={!noteContent.trim()}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                      noteContent.trim()
+                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                        : 'text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                    }`}
+                    title="Copy note to clipboard"
+                  >
+                    {copiedNote ? <CheckCheck className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedNote ? 'Copied!' : 'Copy'}</span>
+                  </button>
+                  <button
+                    onClick={handleExportCurrentNote}
+                    disabled={!noteContent.trim() || !activeTopicInfo}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                      noteContent.trim() && activeTopicInfo
+                        ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800'
+                        : 'text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                    }`}
+                    title="Export note as Markdown (.md)"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export .md</span>
+                  </button>
+                </div>
               </div>
 
             </aside>
@@ -880,6 +964,35 @@ export const CourseReader: React.FC<CourseReaderProps> = ({
               placeholder="Type your notes in your own words..."
               className="w-full h-80 text-sm p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
             />
+            {/* Copy & Export Actions in Mobile Drawer */}
+            <div className="flex items-center gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={handleCopyCurrentNote}
+                disabled={!noteContent.trim()}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                  noteContent.trim()
+                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                    : 'text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                }`}
+                title="Copy note to clipboard"
+              >
+                {copiedNote ? <CheckCheck className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedNote ? 'Copied!' : 'Copy Note'}</span>
+              </button>
+              <button
+                onClick={handleExportCurrentNote}
+                disabled={!noteContent.trim() || !activeTopicInfo}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                  noteContent.trim() && activeTopicInfo
+                    ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800'
+                    : 'text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                }`}
+                title="Export note as Markdown (.md)"
+              >
+                <Download className="w-4 h-4" />
+                <span>Export .md</span>
+              </button>
+            </div>
           </div>
           <button
             onClick={() => setShowNotesDrawer(false)}

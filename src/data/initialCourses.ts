@@ -41,18 +41,23 @@ export const INITIAL_COURSES: Course[] = [
 
 When we look at engineering web applications today, the biggest trap engineers fall into is **premature complexity**. We install dozens of dependencies before writing a single line of domain logic.
 
-Here is the truth: **Software should feel instant, readable, and respectful of the user's attention.**
+Here is the truth: ==**Software should feel instant, readable, and respectful of the user's attention.**==
 
 > [!NOTE]
 > *Simplicity is not the absence of clutter; it is the presence of purpose.* Every button, every network round-trip, and every render cycle should have an intentional reason to exist.
+>
+> Core tenets to remember:
+> a. Zero unneeded dependencies in your package manifest.
+> b. Direct, readable type definitions over abstract generic layers.
+> c. Instant feedback loops for rapid iteration.
 
 ---
 
 ### The Three Pillars of Our Stack
 
-1. **Deterministic Development (Vite & ES Modules):** We eliminate 30-second bundling pauses. Everything compiles in sub-50 milliseconds.
-2. **Declarative UI (React 19 & TypeScript):** Strongly typed state machines prevent runtime crashes before code ever touches production.
-3. **Airy, Minimalist Aesthetics:** Soft gradient meshes, crisp border lines, and generous whitespace leave a lasting impression without overwhelming the reader.
+i. **Deterministic Development (Vite & ES Modules):** We eliminate 30-second bundling pauses. Everything compiles in sub-50 milliseconds.
+ii. **Declarative UI (React 19 & TypeScript):** Strongly typed state machines prevent runtime crashes before code ever touches production.
+iii. **Airy, Minimalist Aesthetics:** Soft gradient meshes, crisp border lines, and generous whitespace leave a lasting impression without overwhelming the reader.
 
 \`\`\`mermaid
 flowchart TD
@@ -103,11 +108,15 @@ export function UserBadge({ name, role, completedTopicsCount }: UserBadgeProps) 
 \`\`\`
 
 > [!TIP]
-> Notice how we use Tailwind utility composition with inline semantic styling. It keeps styles co-located with behavior and eliminates orphaned CSS stylesheets.
+> Notice how we use Tailwind utility composition with inline semantic styling. Press <kbd>Ctrl</kbd> + <kbd>K</kbd> to search or jump across any module instantly.
+>
+> ✓ Co-locates styles with component behavior
+> ✓ Eliminates orphaned, bloated CSS files
+> ❌ Avoid hardcoding arbitrary pixels when theme variables exist
 
 ---
 
-### Architectural Checklist
+### Architectural Verification Checklist
 
 - [x] Eliminate dead packages during dependency audits.
 - [x] Configure strict TypeScript rules (noImplicitAny, strictNullChecks).
@@ -304,7 +313,11 @@ When designing internal APIs for your application:
 - Add idempotency keys to critical mutative actions (like publishing or creating records).
 
 > [!IMPORTANT]
-> Always enforce role-based access checks at the API gateway or controller level. Never rely on the client UI hiding the "Admin" button as a security mechanism.`,
+> Always enforce role-based access checks at the API gateway or controller level.
+>
+> Never rely on the client UI hiding the "Admin" button as a security mechanism:
+> - Validate claims from JWT signatures on every RPC route.
+> - Rate-limit mutation endpoints to mitigate abuse vectors.`,
             updatedAt: '2026-09-25T12:00:00.000Z'
           }
         ]
